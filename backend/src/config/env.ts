@@ -30,6 +30,9 @@ const schema = z.object({
   MIN_DELAY_BETWEEN_SENDS_MS: z.coerce.number().int().min(0).default(2000),
   MAX_EMAILS_PER_HOUR_PER_SENDER: z.coerce.number().int().min(1).default(200),
   SEND_MAX_ATTEMPTS: z.coerce.number().int().min(1).max(10).default(5),
+  // Seconds an idle worker waits for new jobs per Redis call. Raise it (e.g. 30) on hosted Redis
+  // plans that bill per command, such as Upstash's free tier; delayed jobs still fire on time.
+  WORKER_DRAIN_DELAY_SEC: z.coerce.number().int().min(1).max(300).default(5),
 
   RUN_WORKER_IN_API: bool,
 

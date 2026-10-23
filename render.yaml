@@ -1,0 +1,40 @@
+# Render Blueprint: one web service running the Express API and the BullMQ worker together.
+# Postgres (e.g. Neon) and Redis (e.g. Upstash) are external; paste their URLs when Render asks.
+services:
+  - type: web
+    name: reachinbox-api
+    runtime: node
+    rootDir: backend
+    plan: free
+    buildCommand: npm ci && npm run build
+    startCommand: npm start
+    healthCheckPath: /api/health
+    envVars:
+      - key: NODE_VERSION
+        value: "22"
+      - key: RUN_WORKER_IN_API
+        value: "true"
+      - key: JWT_SECRET
+        generateValue: true
+      - key: WORKER_CONCURRENCY
+        value: "5"
+      - key: MIN_DELAY_BETWEEN_SENDS_MS
+        value: "2000"
+      - key: MAX_EMAILS_PER_HOUR_PER_SENDER
+        value: "200"
+      - key: WORKER_DRAIN_DELAY_SEC
+        value: "30"
+      - key: DATABASE_URL
+        sync: false
+      - key: REDIS_URL
+        sync: false
+      - key: FRONTEND_URL
+        sync: false
+      - key: GOOGLE_CLIENT_ID
+        sync: false
+      - key: GOOGLE_CLIENT_SECRET
+        sync: false
+      - key: GOOGLE_REDIRECT_URI
+        sync: false
+      - key: ADMIN_EMAILS
+        sync: false

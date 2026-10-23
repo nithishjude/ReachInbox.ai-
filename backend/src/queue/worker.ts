@@ -100,6 +100,7 @@ export function startWorker(): Worker<ReservedJobData> {
     // the DB status check above makes that re-run harmless.
     stalledInterval: 30_000,
     maxStalledCount: 2,
+    drainDelay: env.WORKER_DRAIN_DELAY_SEC,
   });
 
   worker.on("failed", (job, err) => {
