@@ -70,7 +70,7 @@ export async function ensureSenders(): Promise<void> {
     for (let i = 0; i < env.ETHEREAL_SENDER_COUNT - existing; i++) {
       const account = await nodemailer.createTestAccount();
       await upsertSender(SENDER_NAMES[(existing + i) % SENDER_NAMES.length], account.user, account.pass, ETHEREAL);
-      console.log(`[senders] created Ethereal account ${account.user} (pass: ${account.pass})`);
+      console.log(`[senders] created Ethereal account ${account.user} (credentials saved in the senders table)`);
     }
   }
 

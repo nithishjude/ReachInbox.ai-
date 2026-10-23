@@ -16,6 +16,9 @@ interface Options {
 }
 
 /** Shared entry for the three run modes: API only, worker only, or both in one process. */
+/** Hide the password in connection URLs before they reach any log. */
+const redactUrl = (raw: string) => raw.replace(/\/\/([^:@/]*):[^@/]*@/, "//$1:****@");
+
 /** Fail fast with a clear message instead of hanging when Redis or Postgres is unreachable. */
 async function checkDependencies(): Promise<void> {
   const timeout = (what: string) =>
@@ -23,7 +26,11 @@ async function checkDependencies(): Promise<void> {
   try {
     await Promise.race([redis.ping(), timeout("Redis")]);
   } catch (err) {
-    throw new Error(`Cannot reach Redis at REDIS_URL=${env.REDIS_URL}: ${(err as Error).message}. Is "docker compose up -d" running?`);
+    const url = redactUrl(env.REDIS_URL);
+    const hint = url.startsWith("redis://") && !/localhost|127\.0\.0\.1|redis:\d/.test(url)
+      ? ' Hosted Redis (e.g. Upstash) usually requires TLS: use "rediss://" (two s).'
+      : ' Is "docker compose up -d" running?';
+    throw new Error(`Cannot reach Redis at REDIS_URL=${url}: ${(err as Error).message}.${hint}`);
   }
   try {
     await Promise.race([pool.query("SELECT 1"), timeout("Postgres")]);
