@@ -16,11 +16,40 @@ It keeps working if the server restarts, and the same email is never sent twice.
 
 ## Live demo & video
 
-- Live link: not deployed. It runs locally, or with a single Docker command (see [How to run](#how-to-run)).
+- Live link: https://reach-inbox-ai-three.vercel.app (see [Deployment](#deployment) for how sending works there)
 - Demo video: _link to be added_
+
+## Deployment
+
+| Part | Where |
+|---|---|
+| Frontend | Vercel ([`frontend/vercel.json`](frontend/vercel.json)) |
+| API | Render web service ([`render.yaml`](render.yaml)) |
+| Postgres | Neon |
+| Redis | Upstash (TLS, `rediss://`) |
+
+**How the frontend reaches the API.** Vercel forwards `/api/*` and `/admin/*` to the Render API. The browser only ever talks to the Vercel domain, so the login cookie stays first-party.
+
+**Why the worker doesn't run on Render.** Render's free plan blocks outgoing SMTP ports (25, 465 and 587). The worker's connection to Ethereal never gets an answer and ends in "Connection timeout". The emails aren't lost: they stay queued and retry with backoff, as designed. So on Render I run the **API only** (`RUN_WORKER_IN_API=false`). The **worker runs as a separate process on my machine**, connected to the same Neon database and Upstash Redis:
+
+```bash
+cd backend
+npm run worker      # .env points to Neon + Upstash
+```
+
+This is the same API/worker split the app is built for. It also makes the restart test easy to show on the live site:
+1. Stop the worker and schedule emails; they wait in the cloud queue.
+2. Start the worker again; they're sent, each once.
+
+On a paid Render instance (SMTP allowed) the worker could run there instead, with no code changes.
+
+**Free-tier notes:**
+- The free Render service sleeps after 15 minutes without traffic, so the first request can take up to a minute.
+- `WORKER_DRAIN_DELAY_SEC=30` keeps an idle worker within Upstash's free command limit.
 
 ## Contents
 
+- [Deployment](#deployment)
 - [Tech stack](#tech-stack)
 - [How to run](#how-to-run)
 - [Ethereal email and environment variables](#ethereal-email-and-environment-variables)
