@@ -1,3 +1,5 @@
+import { leadVars, renderTemplate } from "../lib/template";
+import { isHtml } from "../mail/sendEmail";
 import { pool, withTransaction } from "./client";
 
 export type EmailStatus = "scheduled" | "rate_limited" | "sending" | "sent" | "failed";
@@ -26,15 +28,22 @@ export interface EmailWithLimits extends EmailRow {
   hourly_limit: number;
 }
 
+export interface Lead {
+  email: string;
+  /** CSV columns for this lead, used for {{variables}}. */
+  fields?: Record<string, string>;
+}
+
 export interface CreateCampaignInput {
   userId: string;
   senderId: string;
+  /** Templates; may contain {{variables}}. Each email stores its own rendered copy. */
   subject: string;
   body: string;
   startAt: Date;
   delayMs: number;
   hourlyLimit: number;
-  recipients: string[];
+  recipients: Lead[];
 }
 
 export interface CreatedEmail {
@@ -44,26 +53,34 @@ export interface CreatedEmail {
 
 /**
  * Creates the campaign and all its email rows in a single transaction.
- * Recipient i is planned at startAt + i * delayMs. Rows are inserted with one
- * UNNEST-based statement, so 1000+ leads cost a single round trip.
+ * Recipient i is planned at startAt + i * delayMs, and gets the subject/body rendered with its own
+ * variables at creation time, so lists, previews and the worker all see the final personalised text.
+ * Rows are inserted with one UNNEST-based statement, so 1000+ leads cost a single round trip.
  */
 export async function createCampaign(input: CreateCampaignInput): Promise<{ campaignId: string; emails: CreatedEmail[] }> {
+  const bodyIsHtml = isHtml(input.body);
+  const leads = input.recipients.map((r) => ({ email: r.email, vars: leadVars(r.email, r.fields) }));
+
   return withTransaction(async (client) => {
     const { rows: [campaign] } = await client.query<{ id: string }>(
       `INSERT INTO campaigns (user_id, sender_id, subject, body, start_at, delay_ms, hourly_limit, total)
        VALUES ($1, $2, $3, $4, $5, $6, $7, $8) RETURNING id`,
-      [input.userId, input.senderId, input.subject, input.body, input.startAt, input.delayMs, input.hourlyLimit, input.recipients.length],
+      [input.userId, input.senderId, input.subject, input.body, input.startAt, input.delayMs, input.hourlyLimit, leads.length],
     );
 
-    const seqs = input.recipients.map((_, i) => i);
+    const seqs = leads.map((_, i) => i);
     const times = seqs.map((i) => new Date(input.startAt.getTime() + i * input.delayMs).toISOString());
+    const subjects = leads.map((l) => renderTemplate(input.subject, l.vars).replace(/\s+/g, " ").trim() || "(no subject)");
+    const bodies = leads.map((l) => renderTemplate(input.body, l.vars, { html: bodyIsHtml }));
+    const variables = leads.map((l) => JSON.stringify(l.vars));
 
     const { rows } = await client.query<CreatedEmail>(
-      `INSERT INTO emails (campaign_id, user_id, sender_id, seq, recipient, subject, body, scheduled_at, next_attempt_at)
-       SELECT $1, $2, $3, r.seq, r.recipient, $4, $5, r.at, r.at
-       FROM UNNEST($6::int[], $7::text[], $8::timestamptz[]) AS r(seq, recipient, at)
+      `INSERT INTO emails (campaign_id, user_id, sender_id, seq, recipient, subject, body, variables, scheduled_at, next_attempt_at)
+       SELECT $1, $2, $3, r.seq, r.recipient, r.subject, r.body, r.vars::jsonb, r.at, r.at
+       FROM UNNEST($4::int[], $5::text[], $6::text[], $7::text[], $8::text[], $9::timestamptz[])
+            AS r(seq, recipient, subject, body, vars, at)
        RETURNING id, next_attempt_at`,
-      [campaign.id, input.userId, input.senderId, input.subject, input.body, seqs, input.recipients, times],
+      [campaign.id, input.userId, input.senderId, seqs, leads.map((l) => l.email), subjects, bodies, variables, times],
     );
     return { campaignId: campaign.id, emails: rows };
   });
@@ -99,11 +116,11 @@ export async function claimForSending(id: string): Promise<EmailRow | null> {
   return rows[0] ?? null;
 }
 
-export async function markSent(id: string, messageId: string, previewUrl: string | null): Promise<void> {
+export async function markSent(id: string, messageId: string, previewUrl: string | null, processedBy: string): Promise<void> {
   await pool.query(
-    `UPDATE emails SET status = 'sent', sent_at = now(), message_id = $2, preview_url = $3, error = NULL, updated_at = now()
+    `UPDATE emails SET status = 'sent', sent_at = now(), message_id = $2, preview_url = $3, processed_by = $4, error = NULL, updated_at = now()
      WHERE id = $1 AND status = 'sending'`,
-    [id, messageId, previewUrl],
+    [id, messageId, previewUrl, processedBy],
   );
 }
 
@@ -206,16 +223,18 @@ export async function listEmails(params: {
 export interface EmailStats extends Record<ListKind, number> {
   byStatus: Record<EmailStatus, number>;
   sentLastHour: number;
+  campaigns: number;
 }
 
 export async function getStats(userId: string): Promise<EmailStats> {
-  const { rows } = await pool.query<Record<EmailStatus | "sent_last_hour", string>>(
+  const { rows } = await pool.query<Record<EmailStatus | "sent_last_hour" | "campaigns", string>>(
     `SELECT count(*) FILTER (WHERE status = 'scheduled')    AS scheduled,
             count(*) FILTER (WHERE status = 'rate_limited') AS rate_limited,
             count(*) FILTER (WHERE status = 'sending')      AS sending,
             count(*) FILTER (WHERE status = 'sent')         AS sent,
             count(*) FILTER (WHERE status = 'failed')       AS failed,
-            count(*) FILTER (WHERE status = 'sent' AND sent_at > now() - interval '1 hour') AS sent_last_hour
+            count(*) FILTER (WHERE status = 'sent' AND sent_at > now() - interval '1 hour') AS sent_last_hour,
+            (SELECT count(*) FROM campaigns WHERE user_id = $1) AS campaigns
      FROM emails WHERE user_id = $1`,
     [userId],
   );
@@ -232,6 +251,7 @@ export async function getStats(userId: string): Promise<EmailStats> {
     sent: byStatus.sent + byStatus.failed,
     byStatus,
     sentLastHour: Number(r.sent_last_hour),
+    campaigns: Number(r.campaigns),
   };
 }
 

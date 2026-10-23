@@ -8,6 +8,7 @@ import {
   getEmailForUser,
   getStats,
   listEmails,
+  Lead,
   ListKind,
   resetFailedForRetry,
 } from "../db/emails.repo";
@@ -25,7 +26,11 @@ const scheduleSchema = z.object({
   senderId: z.string().uuid().optional(),
   subject: z.string().trim().min(1, "Subject is required").max(300),
   body: z.string().trim().min(1, "Body is required").max(50_000),
-  recipients: z.array(z.string()).min(1, "Add at least one recipient").max(MAX_RECIPIENTS),
+  // Plain addresses, or { email, fields } where fields are the lead's CSV columns ({{variables}}).
+  recipients: z
+    .array(z.union([z.string(), z.object({ email: z.string(), fields: z.record(z.string().max(500)).optional() })]))
+    .min(1, "Add at least one recipient")
+    .max(MAX_RECIPIENTS),
   startAt: z.coerce.date().optional(),
   delayBetweenEmailsSec: z.coerce.number().min(0).max(24 * 3600).default(0),
   hourlyLimit: z.coerce.number().int().min(1).max(100_000).optional(),
@@ -47,15 +52,16 @@ emailsRouter.post(
     }
     const input = parsed.data;
 
-    // Validate + de-duplicate recipients (case-insensitive), keeping first-seen order.
-    const seen = new Set<string>();
+    // Validate + de-duplicate recipients (case-insensitive), keeping first-seen order and fields.
+    const leads = new Map<string, Lead>();
     const invalid: string[] = [];
     for (const raw of input.recipients) {
-      const r = emailSchema.safeParse(raw);
-      if (!r.success) invalid.push(raw);
-      else seen.add(r.data);
+      const { email, fields } = typeof raw === "string" ? { email: raw, fields: undefined } : raw;
+      const r = emailSchema.safeParse(email);
+      if (!r.success) invalid.push(email);
+      else if (!leads.has(r.data)) leads.set(r.data, { email: r.data, fields });
     }
-    const recipients = [...seen];
+    const recipients = [...leads.values()];
     if (recipients.length === 0) {
       res.status(400).json({ error: "No valid email addresses found", invalid });
       return;

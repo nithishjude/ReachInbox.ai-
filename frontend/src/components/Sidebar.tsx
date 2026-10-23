@@ -1,18 +1,19 @@
-import { Clock3, Send, type LucideIcon } from "lucide-react";
-import type { EmailStats, ListKind } from "../types/email";
+import { Clock3, Layers, Send, type LucideIcon } from "lucide-react";
+import type { DashboardTab, EmailStats } from "../types/email";
 import { Logo } from "./Logo";
 import { UserMenu } from "./UserMenu";
 
 interface SidebarProps {
-  active: ListKind;
+  active: DashboardTab;
   stats: EmailStats | null;
-  onSelect: (kind: ListKind) => void;
+  onSelect: (kind: DashboardTab) => void;
   onCompose: () => void;
 }
 
-const tabs: { kind: ListKind; label: string; icon: LucideIcon }[] = [
+const tabs: { kind: DashboardTab; label: string; icon: LucideIcon }[] = [
   { kind: "scheduled", label: "Scheduled", icon: Clock3 },
   { kind: "sent", label: "Sent", icon: Send },
+  { kind: "campaigns", label: "Campaigns", icon: Layers },
 ];
 
 export function Sidebar({ active, stats, onSelect, onCompose }: SidebarProps) {

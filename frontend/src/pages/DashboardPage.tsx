@@ -1,22 +1,26 @@
 import { ChevronLeft, ChevronRight, Menu, RefreshCw, RotateCw, Search } from "lucide-react";
 import { useCallback, useEffect, useState } from "react";
 import { useNavigate, useSearchParams } from "react-router-dom";
+import { CampaignList } from "../components/campaigns/CampaignList";
 import { EmailList } from "../components/EmailList";
 import { FilterMenu, type StatusFilter } from "../components/FilterMenu";
 import { Sidebar } from "../components/Sidebar";
 import { Button } from "../components/ui/Button";
 import { useDebounced } from "../hooks/useDebounced";
 import { PAGE_SIZE, useEmails } from "../hooks/useEmails";
+import { usePolling } from "../hooks/usePolling";
 import { useStarred } from "../hooks/useStarred";
 import { useToast } from "../hooks/useToast";
 import { api } from "../lib/api";
-import type { EmailStats, ListKind } from "../types/email";
+import type { DashboardTab, EmailStats, ListKind } from "../types/email";
 
 export function DashboardPage() {
   const toast = useToast();
   const navigate = useNavigate();
   const [params, setParams] = useSearchParams();
-  const tab: ListKind = params.get("tab") === "sent" ? "sent" : "scheduled";
+  const tabParam = params.get("tab");
+  const tab: DashboardTab = tabParam === "sent" || tabParam === "campaigns" ? tabParam : "scheduled";
+  const listKind: ListKind = tab === "sent" ? "sent" : "scheduled";
 
   const [filter, setFilter] = useState<StatusFilter>("all");
   const [search, setSearch] = useState("");
@@ -27,15 +31,16 @@ export function DashboardPage() {
   const { isStarred, toggle } = useStarred();
 
   const debouncedSearch = useDebounced(search.trim(), 300);
-  const list = useEmails({ kind: tab, status: filter === "all" ? undefined : filter, search: debouncedSearch, refreshKey });
+  const list = useEmails({ kind: listKind, status: filter === "all" ? undefined : filter, search: debouncedSearch, refreshKey });
+  const campaigns = usePolling(() => api.campaigns({ search: debouncedSearch }), `${debouncedSearch}:${refreshKey}`, tab === "campaigns");
   const refresh = () => setRefreshKey((k) => k + 1);
 
   const loadStats = useCallback(() => api.stats().then(setStats).catch(() => undefined), []);
   // Stats follow the list's polling: refresh whenever list data changes.
   useEffect(() => void loadStats(), [loadStats, list.items, refreshKey]);
 
-  const selectTab = (kind: ListKind) => {
-    setParams(kind === "sent" ? { tab: "sent" } : {});
+  const selectTab = (kind: DashboardTab) => {
+    setParams(kind === "scheduled" ? {} : { tab: kind });
     setFilter("all");
     setMenuOpen(false);
   };
@@ -85,7 +90,7 @@ export function DashboardPage() {
               className="min-w-0 flex-1 bg-transparent text-[17px] outline-none placeholder:text-fg-subtle"
             />
           </label>
-          <FilterMenu kind={tab} value={filter} onChange={setFilter} />
+          {tab !== "campaigns" && <FilterMenu kind={listKind} value={filter} onChange={setFilter} />}
           <button onClick={refresh} aria-label="Refresh" className="focus-ring rounded-lg p-2 text-fg-muted hover:bg-subtle">
             <RefreshCw className={`h-5 w-5 ${list.refreshing ? "animate-spin" : ""}`} strokeWidth={1.5} />
           </button>
@@ -103,8 +108,19 @@ export function DashboardPage() {
         )}
 
         <section className="mt-6">
+          {tab === "campaigns" ? (
+            <CampaignList
+              items={campaigns.data?.items ?? []}
+              loading={campaigns.loading && !campaigns.data}
+              error={campaigns.error}
+              filtered={!!debouncedSearch}
+              onOpen={(c) => navigate(`/campaigns/${c.id}`)}
+              onRetryLoad={campaigns.refresh}
+              onCompose={compose}
+            />
+          ) : (
           <EmailList
-            kind={tab}
+            kind={listKind}
             items={list.items}
             loading={list.loading}
             error={list.error}
@@ -115,8 +131,9 @@ export function DashboardPage() {
             onRetryLoad={list.refresh}
             onCompose={compose}
           />
+          )}
 
-          {list.pageCount > 1 && (
+          {tab !== "campaigns" && list.pageCount > 1 && (
             <div className="flex items-center justify-end gap-2 px-4 py-4 text-sm text-fg-muted">
               <span className="tabular-nums">
                 {(list.page - 1) * PAGE_SIZE + 1}–{Math.min(list.page * PAGE_SIZE, list.total)} of {list.total.toLocaleString()}

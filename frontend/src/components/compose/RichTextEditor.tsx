@@ -17,7 +17,7 @@ import {
   UnfoldVertical,
   type LucideIcon,
 } from "lucide-react";
-import { useEffect, useRef, useState } from "react";
+import { forwardRef, useEffect, useImperativeHandle, useRef, useState } from "react";
 
 /*
  * Lightweight rich-text editor (contentEditable + execCommand). execCommand is deprecated but still
@@ -54,8 +54,22 @@ function ToolButton({ icon: Icon, label, onClick, active }: { icon: LucideIcon; 
 
 const Divider = () => <span className="mx-1.5 h-7 w-px bg-line" />;
 
-export function RichTextEditor({ value, onChange, placeholder, invalid }: { value: string; onChange: (html: string) => void; placeholder: string; invalid?: boolean }) {
+export interface RichTextEditorHandle {
+  /** Insert plain text at the last caret position (used for {{variables}}). */
+  insert: (text: string) => void;
+}
+
+interface RichTextEditorProps {
+  value: string;
+  onChange: (html: string) => void;
+  placeholder: string;
+  invalid?: boolean;
+  onFocus?: () => void;
+}
+
+export const RichTextEditor = forwardRef<RichTextEditorHandle, RichTextEditorProps>(function RichTextEditor({ value, onChange, placeholder, invalid, onFocus }, handle) {
   const ref = useRef<HTMLDivElement>(null);
+  const savedRange = useRef<Range | null>(null);
   const [sizeOpen, setSizeOpen] = useState(false);
   const [alignIndex, setAlignIndex] = useState(0);
   const [spacious, setSpacious] = useState(false);
@@ -64,6 +78,34 @@ export function RichTextEditor({ value, onChange, placeholder, invalid }: { valu
   useEffect(() => {
     if (ref.current && ref.current.innerHTML !== value) ref.current.innerHTML = value;
   }, [value]);
+
+  // Remember the caret while the user clicks elsewhere (e.g. a variable chip).
+  useEffect(() => {
+    const save = () => {
+      const sel = document.getSelection();
+      if (sel?.rangeCount && ref.current?.contains(sel.anchorNode)) savedRange.current = sel.getRangeAt(0).cloneRange();
+    };
+    document.addEventListener("selectionchange", save);
+    return () => document.removeEventListener("selectionchange", save);
+  }, []);
+
+  useImperativeHandle(handle, () => ({
+    insert(text: string) {
+      const el = ref.current;
+      if (!el) return;
+      el.focus();
+      const sel = document.getSelection();
+      if (sel && savedRange.current) {
+        sel.removeAllRanges();
+        sel.addRange(savedRange.current);
+      } else if (sel) {
+        sel.selectAllChildren(el);
+        sel.collapseToEnd();
+      }
+      exec("insertText", text);
+      onChange(el.innerHTML);
+    },
+  }));
 
   const run = (command: string, arg?: string) => {
     ref.current?.focus();
@@ -150,8 +192,9 @@ export function RichTextEditor({ value, onChange, placeholder, invalid }: { valu
         aria-label="Email body"
         data-placeholder={placeholder}
         onInput={() => onChange(ref.current?.innerHTML ?? "")}
+        onFocus={onFocus}
         className={`email-body editor min-h-[360px] px-1 text-[17px] outline-none ${spacious ? "leading-loose" : "leading-relaxed"}`}
       />
     </div>
   );
-}
+});

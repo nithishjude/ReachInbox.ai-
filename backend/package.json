@@ -12,7 +12,9 @@
     "start:api": "node dist/server.js",
     "start:worker": "node dist/workerMain.js",
     "typecheck": "tsc --noEmit -p tsconfig.json",
-    "load-test": "tsx scripts/loadTest.ts"
+    "load-test": "tsx scripts/loadTest.ts",
+    "test": "vitest run",
+    "proof:workers": "tsx scripts/multiWorkerProof.ts"
   },
   "dependencies": {
     "@bull-board/api": "^6.5.3",
@@ -38,6 +40,7 @@
     "@types/nodemailer": "^6.4.17",
     "@types/pg": "^8.11.10",
     "tsx": "^4.19.2",
-    "typescript": "^5.7.2"
+    "typescript": "^5.7.2",
+    "vitest": "^2.1.8"
   }
 }

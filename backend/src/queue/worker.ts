@@ -1,4 +1,5 @@
 import { DelayedError, Job, UnrecoverableError, Worker } from "bullmq";
+import os from "os";
 import { env } from "../config/env";
 import {
   claimForSending,
@@ -26,6 +27,8 @@ const STALE_SENDING_MS = 2 * 60_000;
 const ORDER_SPREAD_MS = 25;
 // Waking up this close to a reserved slot counts as "on time".
 const SLOT_TOLERANCE_MS = 250;
+// Identifies this worker instance in the DB (emails.processed_by).
+export const WORKER_ID = `${os.hostname()}:${process.pid}`;
 
 async function postpone(job: Job<ReservedJobData>, token: string | undefined, runAt: number, data: ReservedJobData) {
   await job.updateData(data);
@@ -76,7 +79,7 @@ export async function processEmailJob(job: Job<ReservedJobData>, token?: string)
   try {
     const { transport, sender } = await getTransport(claimed.sender_id);
     const result = await sendEmail(transport, sender, claimed);
-    await markSent(emailId, result.messageId, result.previewUrl);
+    await markSent(emailId, result.messageId, result.previewUrl, WORKER_ID);
     console.log(`[worker] sent ${claimed.recipient} from ${sender.email} ${result.previewUrl ?? ""}`);
     return `sent ${result.messageId}`;
   } catch (err) {
@@ -112,7 +115,7 @@ export function startWorker(): Worker<ReservedJobData> {
   worker.on("error", (err) => console.error("[worker] error", err.message));
 
   console.log(
-    `[worker] started: concurrency=${env.WORKER_CONCURRENCY}, min gap=${env.MIN_DELAY_BETWEEN_SENDS_MS}ms/sender, ` +
+    `[worker] ${WORKER_ID} started: concurrency=${env.WORKER_CONCURRENCY}, min gap=${env.MIN_DELAY_BETWEEN_SENDS_MS}ms/sender, ` +
       `max ${env.MAX_EMAILS_PER_HOUR_PER_SENDER}/hour/sender`,
   );
   return worker;

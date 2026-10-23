@@ -26,6 +26,8 @@ interface SmtpServer {
 }
 
 const ETHEREAL: SmtpServer = { host: "smtp.ethereal.email", port: 587, secure: false };
+/** Senders with this host never touch the network (proof/benchmark scripts only). */
+export const DRY_RUN_HOST = "dry-run";
 const SENDER_NAMES = ["Oliver Brooks", "Maya Patel", "Liam Carter", "Sofia Reyes", "Noah Kim"];
 
 const etherealSendersSchema = z.array(z.object({ name: z.string().min(1), user: z.string().email(), pass: z.string().min(1) }));
@@ -82,8 +84,9 @@ export async function ensureSenders(): Promise<void> {
 
 export async function listSenders(): Promise<PublicSender[]> {
   const { rows } = await pool.query<PublicSender>(
-    "SELECT id, name, email, smtp_host <> $1 AS real FROM senders ORDER BY (smtp_host <> $1), created_at, email",
-    [ETHEREAL.host],
+    `SELECT id, name, email, smtp_host <> $1 AS real FROM senders WHERE smtp_host <> $2
+     ORDER BY (smtp_host <> $1), created_at, email`,
+    [ETHEREAL.host, DRY_RUN_HOST],
   );
   return rows;
 }
@@ -97,6 +100,11 @@ export async function getTransport(senderId: string): Promise<{ transport: Trans
   if (!sender) throw new Error(`Sender ${senderId} not found`);
 
   let transport = transports.get(senderId);
+  if (!transport && sender.smtp_host === DRY_RUN_HOST) {
+    // Used by scripts/multiWorkerProof.ts: renders the message but sends nothing over the network.
+    transport = nodemailer.createTransport({ jsonTransport: true });
+    transports.set(senderId, transport);
+  }
   if (!transport) {
     transport = nodemailer.createTransport({
       host: sender.smtp_host,

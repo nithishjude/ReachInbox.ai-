@@ -65,10 +65,33 @@ The schema is applied automatically on boot (`src/db/schema.sql`, idempotent, gu
 | `npm run dev:worker` / `npm run start:worker` | Worker only. Start several to scale out; the limits stay global because they live in Redis |
 | `npm run build` | Compile to `dist/` |
 | `npm run load-test -- <your-login-email> 1000 50` | Schedule 1000 emails "now" with a 50/hour campaign limit |
+| `npm run proof:workers -- <your-login-email> 60 20 3` | **Multi-worker proof**: starts 3 worker processes and checks the limit holds across them (see §4) |
+| `npm test` | Backend tests against real Postgres + Redis (uses the `reachinbox_test` DB and Redis DB 15) |
+
+### Everything in Docker (one command)
+
+```bash
+docker compose --profile app up --build     # http://localhost:8080
+```
+
+This runs Postgres, Redis, the API, **2 worker replicas** and nginx serving the frontend (`/api` and `/admin` are proxied to the API). It reads secrets from `backend/.env`. Add `http://localhost:8080/api/auth/google/callback` as an extra authorized redirect URI in Google Cloud.
+
+### Tests & CI
+
+* `cd backend && npm test`: **14 integration tests** run against real Redis and Postgres:
+  * the rate limiter under 50 concurrent callers
+  * the per-sender limit across campaigns
+  * min-gap spacing
+  * 20 workers racing for one email, with exactly one claim winning
+  * the worker end to end: idempotent re-delivery, next-hour rescheduling in order, and cancelled emails
+  * personalization: variables, fallbacks and HTML escaping
+  * campaign progress counts
+* `cd frontend && npm test`: **10 tests** for lead/CSV parsing (quoted cells, semicolons, header columns) and the template helpers.
+* `.github/workflows/ci.yml` runs typecheck, tests (with Postgres and Redis service containers), the builds and the Docker image builds on every push.
 
 ### Live queue dashboard
 
-**Bull Board** is mounted at **http://localhost:5173/admin/queues** (proxied) or http://localhost:4000/admin/queues. It shows delayed, waiting, active, completed and failed jobs in real time. It requires a logged-in session, and the user menu in the header links to it.
+**Bull Board** is mounted at **http://localhost:5173/admin/queues** (proxied) or http://localhost:4000/admin/queues. It shows delayed, waiting, active, completed and failed jobs in real time. It's **restricted to operators**: only Google accounts listed in `ADMIN_EMAILS` can open it (others get 403), and only they see the *Queue monitor* link in the user menu.
 
 ---
 
@@ -116,6 +139,7 @@ Gmail allows about 500 emails per day. Use real senders only with addresses that
 | `GOOGLE_CLIENT_ID` / `GOOGLE_CLIENT_SECRET` / `GOOGLE_REDIRECT_URI` | – | OAuth |
 | `ETHEREAL_SENDER_COUNT` / `ETHEREAL_SENDERS` | 3 / – | Senders (see above) |
 | `SMTP_SENDERS` | – | Optional real-delivery senders, e.g. Gmail with an App Password (see above) |
+| `ADMIN_EMAILS` | – | Comma-separated accounts allowed to open the BullMQ dashboard |
 | `WORKER_CONCURRENCY` | 5 | Jobs processed in parallel per worker process |
 | `MIN_DELAY_BETWEEN_SENDS_MS` | **2000** | Minimum gap between two sends **from the same sender** |
 | `MAX_EMAILS_PER_HOUR_PER_SENDER` | **200** | Hard per-sender cap per clock hour |
@@ -144,15 +168,21 @@ All `/api/emails/*` and `/api/senders` routes require a session: the `ri_session
 | `GET /api/emails/:id` | One email (incl. error and Ethereal preview URL) |
 | `DELETE /api/emails/:id` | Cancel a scheduled email or delete one from history (refused while it is mid-send) |
 | `GET /api/senders` | Senders + current hourly usage + server limits |
+| `GET /api/campaigns?search=&page=` | Every scheduled batch with live progress: counts per status, sent this hour, next send, resume time |
+| `GET /api/campaigns/:id` | One campaign's progress + its recipients in send order |
+| `GET /admin/queues` | BullMQ dashboard (`ADMIN_EMAILS` only) |
 | `GET /health` | DB + Redis health |
 
 ```jsonc
 // POST /api/emails/schedule
 {
   "senderId": "uuid (optional, defaults to the first sender)",
-  "subject": "Quick question",
-  "body": "Hi there…",
-  "recipients": ["a@x.com", "b@y.com"],      // validated + de-duplicated server-side
+  "subject": "Quick idea for {{company}}",   // {{variables}} with optional fallback: {{first_name|there}}
+  "body": "<p>Hi {{first_name|there}},</p>",
+  "recipients": [                            // validated + de-duplicated server-side
+    "a@x.com",                                //   plain address, or a lead with CSV columns:
+    { "email": "ava@acme.com", "fields": { "Name": "Ava Thompson", "Company": "Acme" } }
+  ],
   "startAt": "2026-10-23T10:00:00.000Z",      // optional; past/missing = now
   "delayBetweenEmailsSec": 2,                 // spacing inside this campaign
   "hourlyLimit": 50                           // this campaign's own per-hour cap
@@ -230,6 +260,41 @@ else senderCount++, campaignCount++, gap[sender] = slot + minGap → RESERVED(sl
 * **Reserved, slot in the future:** the job is `moveToDelayed(slot)` with the reservation stored in job data. It waits in Redis, not in a sleeping worker, so concurrency slots stay free. When it wakes it sends without re-checking. Jobs that contend for the same sender get spaced out in order, with no retry storm.
 * **Limited:** the job is **never dropped or failed**. It's moved to the start of the next hour window plus `seq × 25 ms`, so that the campaign's original order is preserved when the window opens. The row becomes `rate_limited` with its new `next_attempt_at`, and the dashboard shows it. `DelayedError` makes BullMQ treat this as a reschedule, not a failed attempt.
 
+### Personalization
+
+* **Columns become variables:** upload a CSV with a header row, e.g. `name,email,company`. Every column becomes a variable: `{{name}}`, `{{company}}`, `{{email}}`, plus `{{first_name}}` derived from `name`.
+* **Fallbacks:** `{{first_name|there}}` uses the fallback when the value is missing.
+* **Compose helpers:** the Personalize panel inserts variables at the caret, warns about variables that aren't columns, and shows a live preview of the exact subject and body for any recipient.
+* **Rendering:** templates are rendered **per recipient when the campaign is created** (`createCampaign`), so lists, search, the email view and the worker all use the final text. The campaign keeps the original template, and each email stores its `variables` (JSONB).
+* **Safety:** values inserted into HTML bodies are escaped, so lead data can't inject markup.
+
+### Campaign progress
+
+* **Campaigns tab:** every Schedule click is a campaign. The tab lists them with a stacked progress bar (sent / failed / sending / rate-limited / scheduled), a state (*Scheduled, Sending, Throttled, Completed, Completed with errors*) and a "what happens next" line, e.g. *"Hourly limit reached (3/3 this hour). Resumes Tue 1:00 PM"*.
+* **Detail page:** shows the sender, hourly limit usage this hour, delay, first and last send, and every recipient in send order.
+* **Data:** everything is computed in one aggregate query per campaign, and the page polls every 5 s.
+
+### Proven across multiple workers
+
+`npm run proof:workers -- <email> 60 20 3` starts 3 separate worker processes (plus the API's in-process worker, if running) against one burst of 60 emails with a 20/hour limit:
+
+```
+Sent:          20  (limit 20)
+  by Jude:27060: 5
+  by Jude:29664: 5
+  by Jude:31268: 5
+  by Jude:8152: 5
+Rate limited:  40  (rescheduled to 2026-10-23T14:00:00.225Z)
+Duplicates:    0
+PASS  exactly 20 sent across all workers
+PASS  work was shared by more than one worker process
+PASS  remaining 40 rescheduled, none dropped or failed
+PASS  rescheduled into the next hour window
+PASS  no email sent twice
+```
+
+Each sent row records `processed_by = host:pid`, so the distribution can be checked in the database.
+
 ### Behavior under load (1000+ emails at the same time)
 
 Verified with `npm run load-test -- <email> 1000 50`:
@@ -257,6 +322,10 @@ Verified with `npm run load-test -- <email> 1000 50`:
 - [x] Live BullMQ dashboard (Bull Board) at `/admin/queues`
 - [x] Optional real-delivery senders (Gmail/any SMTP via `SMTP_SENDERS`) alongside Ethereal, through the same engine
 - [x] Manual retry of failed emails (single or all), safe by construction: only `failed` rows are re-queued
+- [x] **Personalization**: `{{column}}` variables from CSV headers with fallbacks, rendered per recipient and HTML-escaped
+- [x] **Campaign progress** API: per-status counts, sent this hour, next send, resume time
+- [x] Admin-only BullMQ dashboard (`ADMIN_EMAILS`)
+- [x] 24 tests (14 backend integration, 10 frontend), CI pipeline, full Docker setup with 2 worker replicas, and a multi-worker proof script
 - [x] Graceful shutdown that drains in-flight sends
 - [x] Load-test script
 
@@ -269,6 +338,8 @@ Verified with `npm run load-test -- <email> 1000 50`:
 - [x] **Compose page** as in the Figma: From (sender picker, incl. optional real-delivery senders), **To with email chips and "+N"**, typing/pasting addresses, **Upload List** (CSV/TXT, any column layout) with the **detected count** plus duplicate/invalid report, Subject, **Delay between 2 emails**, **Hourly Limit**, **rich-text editor** (undo/redo, size, bold/italic/underline, align, spacing, lists, indent, quote, strikethrough), 📎 upload shortcut
 - [x] **Send Later** popover: "Pick date & time" plus the Figma presets (Tomorrow; Tomorrow 10:00 AM, 11:00 AM, 3:00 PM); the button switches between **Send** and **Send Later**
 - [x] "N failed · Retry all failed" banner on the Sent tab
+- [x] **Personalize panel** in Compose: variable chips from CSV columns, unknown-variable warning, live per-recipient preview
+- [x] **Campaigns** tab with progress bars and states, plus a campaign detail page with stats and recipients in send order
 - [x] Loading skeletons, empty states, error states with retry, toasts, pagination, 5 s auto-refresh
 - [x] Reusable components (`components/ui`: Button, Avatar, StatusBadge, EmptyState, Spinner; `components/compose`: RecipientInput, RichTextEditor, SendLaterPopover; PageHeader, Sidebar, UserMenu, FilterMenu, EmailList), typed API client and types, HTML bodies sanitised with DOMPurify before rendering, keyboard accessible
 
@@ -298,7 +369,7 @@ Verified with `npm run load-test -- <email> 1000 50`:
 ## 7. Demo script (for the video)
 
 1. `docker compose up -d`, `npm run dev` in backend and frontend. Log in with Google.
-2. **Compose** → **Upload List** → `sample-leads.csv` (5 detected, 1 duplicate, 1 invalid) → subject/body → delay `5`, hourly limit `3` → 🕐 **Pick date & time** about 2 minutes ahead → **Done** → **Send Later**.
-3. Show the **Scheduled** tab and Bull Board (`/admin/queues` → *Delayed*).
+2. **Compose** → **Upload List** → `sample-leads.csv` (5 detected, 1 duplicate, 1 invalid) → subject `Quick idea for {{company}}`, body `Hi {{first_name}},…` (show the live preview) → delay `5`, hourly limit `3` → 🕐 **Pick date & time** about 2 minutes ahead → **Done** → **Send Later**.
+3. Show the **Scheduled** tab, the **Campaigns** tab (progress bar) and Bull Board (`/admin/queues` → *Delayed*).
 4. **Restart:** stop the backend (Ctrl+C) before the start time, wait, start it again. The emails still send at their times and appear once in **Sent** (open the Ethereal preview).
 5. **Rate limit:** with a limit of 3, emails 4+ show **Rate limited** with a next-hour time. For load, run `npm run load-test -- you@gmail.com 1000 50` and show 50 slots 2 s apart while the rest wait for the next window.

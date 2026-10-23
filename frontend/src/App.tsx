@@ -2,6 +2,7 @@ import type { ReactNode } from "react";
 import { Navigate, Route, Routes } from "react-router-dom";
 import { Spinner } from "./components/ui/Spinner";
 import { useAuth } from "./hooks/useAuth";
+import { CampaignPage } from "./pages/CampaignPage";
 import { ComposePage } from "./pages/ComposePage";
 import { DashboardPage } from "./pages/DashboardPage";
 import { EmailPage } from "./pages/EmailPage";
@@ -36,6 +37,7 @@ export function App() {
       <Route path="/" element={guarded(<DashboardPage />)} />
       <Route path="/compose" element={guarded(<ComposePage />)} />
       <Route path="/email/:id" element={guarded(<EmailPage />)} />
+      <Route path="/campaigns/:id" element={guarded(<CampaignPage />)} />
       <Route path="*" element={<Navigate to="/" replace />} />
     </Routes>
   );

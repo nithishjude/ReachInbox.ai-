@@ -48,10 +48,12 @@ export function UserMenu() {
             {theme === "dark" ? <Sun className="h-4 w-4" /> : <Moon className="h-4 w-4" />}
             {theme === "dark" ? "Light mode" : "Dark mode"}
           </button>
-          <a role="menuitem" href="/admin/queues" target="_blank" rel="noreferrer" className={`${item} text-fg hover:bg-subtle`}>
-            <Activity className="h-4 w-4" />
-            Queue monitor
-          </a>
+          {user.isAdmin && (
+            <a role="menuitem" href="/admin/queues" target="_blank" rel="noreferrer" className={`${item} text-fg hover:bg-subtle`}>
+              <Activity className="h-4 w-4" />
+              Queue monitor
+            </a>
+          )}
           <div className="my-1 h-px bg-line" />
           <button role="menuitem" onClick={() => void logout()} className={`${item} text-red-600 hover:bg-red-500/10 dark:text-red-400`}>
             <LogOut className="h-4 w-4" />

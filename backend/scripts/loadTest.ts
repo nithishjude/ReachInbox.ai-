@@ -22,7 +22,7 @@ async function main() {
   if (!sender) throw new Error("No senders; start the API once first");
 
   const count = Number(countArg);
-  const recipients = Array.from({ length: count }, (_, i) => `lead${i + 1}@example.com`);
+  const recipients = Array.from({ length: count }, (_, i) => ({ email: `lead${i + 1}@example.com`, fields: { first_name: `Lead ${i + 1}` } }));
   const t0 = Date.now();
   const { campaignId, emails } = await createCampaign({
     userId: user.id,

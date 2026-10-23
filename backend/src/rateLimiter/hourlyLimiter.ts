@@ -59,24 +59,32 @@ end
 return {0, slot, now}
 `;
 
+export type LimitScope = "sender" | "campaign";
+
 export type ReserveResult =
   | { kind: "reserved"; at: number; now: number }
-  | { kind: "limited"; scope: "sender" | "campaign"; retryAt: number; now: number };
+  | { kind: "limited"; scope: LimitScope; retryAt: number; now: number };
 
-export async function reserveSendSlot(params: {
+export interface ReserveParams {
   senderId: string;
   campaignId: string;
   campaignHourlyLimit: number;
-}): Promise<ReserveResult> {
+  /** Overrides for tests; default to the env configuration. */
+  senderHourlyLimit?: number;
+  minGapMs?: number;
+}
+
+export async function reserveSendSlot(params: ReserveParams): Promise<ReserveResult> {
+  const senderLimit = params.senderHourlyLimit ?? env.MAX_EMAILS_PER_HOUR_PER_SENDER;
   const [code, at, now] = (await redis.eval(
     RESERVE_SCRIPT,
     0,
     `rl:sender:${params.senderId}`,
     `rl:campaign:${params.campaignId}`,
     `gap:sender:${params.senderId}`,
-    env.MAX_EMAILS_PER_HOUR_PER_SENDER,
+    senderLimit,
     params.campaignHourlyLimit,
-    env.MIN_DELAY_BETWEEN_SENDS_MS,
+    params.minGapMs ?? env.MIN_DELAY_BETWEEN_SENDS_MS,
   )) as [number, number, number];
 
   if (code === 0) return { kind: "reserved", at, now };

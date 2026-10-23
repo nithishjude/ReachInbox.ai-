@@ -1,4 +1,6 @@
 import type {
+  CampaignDetail,
+  CampaignProgress,
   EmailItem,
   EmailStats,
   EmailStatus,
@@ -52,6 +54,13 @@ export const api = {
   schedule: (body: ScheduleRequest) =>
     request<ScheduleResponse>("/emails/schedule", { method: "POST", body: JSON.stringify(body) }),
   senders: () => request<SendersResponse>("/senders"),
+  campaigns: (params: { search?: string; page?: number } = {}) => {
+    const qs = new URLSearchParams();
+    if (params.search) qs.set("search", params.search);
+    if (params.page) qs.set("page", String(params.page));
+    return request<Paginated<CampaignProgress>>(`/campaigns?${qs}`);
+  },
+  campaign: (id: string) => request<CampaignDetail>(`/campaigns/${id}`),
   deleteEmail: (id: string) => request<{ ok: true }>(`/emails/${id}`, { method: "DELETE" }),
   retry: (target: { ids: string[] } | { all: true }) =>
     request<{ retried: number }>("/emails/retry", { method: "POST", body: JSON.stringify(target) }),

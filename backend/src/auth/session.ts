@@ -55,6 +55,21 @@ export function optionalAuth(req: Request, _res: Response, next: NextFunction): 
   next();
 }
 
+export const isAdmin = (user?: SessionUser) => !!user && env.ADMIN_EMAILS.includes(user.email.toLowerCase());
+
+/** Operator-only pages (BullMQ dashboard): emails listed in ADMIN_EMAILS. */
+export function requireAdmin(req: Request, res: Response, next: NextFunction): void {
+  if (!req.user) {
+    res.status(401).send("Log in first: open the dashboard and sign in with Google.");
+    return;
+  }
+  if (!isAdmin(req.user)) {
+    res.status(403).send("Forbidden: your account is not in ADMIN_EMAILS.");
+    return;
+  }
+  next();
+}
+
 export function requireAuth(req: Request, res: Response, next: NextFunction): void {
   if (!req.user) {
     res.status(401).json({ error: "Not authenticated" });

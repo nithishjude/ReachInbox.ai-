@@ -3,7 +3,7 @@ import { Router } from "express";
 import { OAuth2Client } from "google-auth-library";
 import { env } from "../config/env";
 import { pool } from "../db/client";
-import { clearSession, issueSession, SessionUser } from "../auth/session";
+import { clearSession, isAdmin, issueSession, SessionUser } from "../auth/session";
 
 const STATE_COOKIE = "ri_oauth_state";
 
@@ -64,7 +64,7 @@ authRouter.get("/me", (req, res) => {
     res.status(401).json({ error: "Not authenticated" });
     return;
   }
-  res.json({ user: req.user });
+  res.json({ user: { ...req.user, isAdmin: isAdmin(req.user) } });
 });
 
 authRouter.post("/logout", (_req, res) => {

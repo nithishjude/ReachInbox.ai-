@@ -32,6 +32,12 @@ const schema = z.object({
   SEND_MAX_ATTEMPTS: z.coerce.number().int().min(1).max(10).default(5),
 
   RUN_WORKER_IN_API: bool,
+
+  // Comma-separated emails allowed to open the BullMQ dashboard (/admin/queues).
+  ADMIN_EMAILS: z
+    .string()
+    .default("")
+    .transform((s) => s.split(",").map((e) => e.trim().toLowerCase()).filter(Boolean)),
 });
 
 const parsed = schema.safeParse(process.env);

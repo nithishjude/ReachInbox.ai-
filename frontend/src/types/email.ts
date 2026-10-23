@@ -1,11 +1,14 @@
 export type EmailStatus = "scheduled" | "rate_limited" | "sending" | "sent" | "failed";
 export type ListKind = "scheduled" | "sent";
+export type DashboardTab = ListKind | "campaigns";
 
 export interface User {
   id: string;
   email: string;
   name: string;
   avatarUrl: string | null;
+  /** Allowed to open the BullMQ dashboard (ADMIN_EMAILS). */
+  isAdmin: boolean;
 }
 
 export interface EmailItem {
@@ -33,6 +36,30 @@ export interface Paginated<T> {
 export interface EmailStats extends Record<ListKind, number> {
   byStatus: Record<EmailStatus, number>;
   sentLastHour: number;
+  campaigns: number;
+}
+
+export interface CampaignProgress {
+  id: string;
+  subject: string;
+  sender_name: string;
+  sender_email: string;
+  created_at: string;
+  start_at: string;
+  delay_ms: number;
+  hourly_limit: number;
+  total: number;
+  counts: Record<EmailStatus, number>;
+  sent_this_hour: number;
+  first_sent_at: string | null;
+  last_sent_at: string | null;
+  next_send_at: string | null;
+  resumes_at: string | null;
+}
+
+export interface CampaignDetail {
+  campaign: CampaignProgress;
+  emails: EmailItem[];
 }
 
 export interface Sender {
@@ -57,7 +84,8 @@ export interface ScheduleRequest {
   senderId?: string;
   subject: string;
   body: string;
-  recipients: string[];
+  /** Plain addresses, or leads with CSV columns for {{variables}}. */
+  recipients: (string | { email: string; fields: Record<string, string> })[];
   startAt: string;
   delayBetweenEmailsSec: number;
   hourlyLimit: number;

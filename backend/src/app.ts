@@ -5,8 +5,9 @@ import cookieParser from "cookie-parser";
 import cors from "cors";
 import express, { NextFunction, Request, Response } from "express";
 import { authRouter } from "./api/auth.routes";
+import { campaignsRouter } from "./api/campaigns.routes";
 import { emailsRouter, metaRouter } from "./api/schedule.routes";
-import { optionalAuth, requireAuth } from "./auth/session";
+import { optionalAuth, requireAdmin, requireAuth } from "./auth/session";
 import { env } from "./config/env";
 import { pool } from "./db/client";
 import { redis } from "./lib/redis";
@@ -28,13 +29,14 @@ export function createApp() {
 
   app.use("/api/auth", authRouter);
   app.use("/api/emails", requireAuth, emailsRouter);
+  app.use("/api/campaigns", requireAuth, campaignsRouter);
   app.use("/api", requireAuth, metaRouter);
 
   // Live BullMQ dashboard (waiting / delayed / active / completed / failed jobs).
   const boardAdapter = new ExpressAdapter();
   boardAdapter.setBasePath("/admin/queues");
   createBullBoard({ queues: [new BullMQAdapter(emailQueue)], serverAdapter: boardAdapter });
-  app.use("/admin/queues", requireAuth, boardAdapter.getRouter());
+  app.use("/admin/queues", requireAdmin, boardAdapter.getRouter());
 
   app.use((_req, res) => res.status(404).json({ error: "Not found" }));
   // eslint-disable-next-line @typescript-eslint/no-unused-vars

@@ -2,7 +2,8 @@ import { Clock3, Paperclip, X } from "lucide-react";
 import { useEffect, useRef, useState } from "react";
 import { useNavigate } from "react-router-dom";
 import { RecipientInput } from "../components/compose/RecipientInput";
-import { RichTextEditor } from "../components/compose/RichTextEditor";
+import { PersonalizePanel } from "../components/compose/PersonalizePanel";
+import { RichTextEditor, type RichTextEditorHandle } from "../components/compose/RichTextEditor";
 import { SendLaterPopover } from "../components/compose/SendLaterPopover";
 import { PageHeader } from "../components/PageHeader";
 import { Spinner } from "../components/ui/Spinner";
@@ -10,7 +11,7 @@ import { useToast } from "../hooks/useToast";
 import { api } from "../lib/api";
 import { formatPillTime } from "../lib/format";
 import { isEmptyHtml } from "../lib/html";
-import { parseLeads } from "../lib/parseLeads";
+import { parseLeadFile } from "../lib/parseLeads";
 import type { SendersResponse } from "../types/email";
 
 const MAX_FILE_BYTES = 5 * 1024 * 1024;
@@ -33,10 +34,17 @@ export function ComposePage() {
   const toast = useToast();
   const fileInput = useRef<HTMLInputElement>(null);
   const clockRef = useRef<HTMLButtonElement>(null);
+  const subjectRef = useRef<HTMLInputElement>(null);
+  const editorRef = useRef<RichTextEditorHandle>(null);
+  // Where a clicked {{variable}} goes: the field the user was last typing in.
+  const insertTarget = useRef<"subject" | "body">("body");
 
   const [meta, setMeta] = useState<SendersResponse | null>(null);
   const [senderId, setSenderId] = useState("");
   const [recipients, setRecipients] = useState<string[]>([]);
+  // Personalization data from uploaded CSVs: columns and per-email values.
+  const [columns, setColumns] = useState<string[]>([]);
+  const [leadFields, setLeadFields] = useState<Record<string, Record<string, string>>>({});
   const [subject, setSubject] = useState("");
   const [body, setBody] = useState("");
   const [delaySec, setDelaySec] = useState("");
@@ -62,13 +70,33 @@ export function ComposePage() {
 
   const onUpload = async (file: File) => {
     if (file.size > MAX_FILE_BYTES) return toast.error("File too large", "The limit is 5 MB.");
-    const parsed = parseLeads(await file.text());
+    const parsed = parseLeadFile(await file.text());
     if (parsed.emails.length === 0) return toast.error("No email addresses found", file.name);
     const merged = [...new Set([...recipients, ...parsed.emails])];
     setRecipients(merged);
+    setColumns((c) => [...new Set([...c, ...parsed.columns])]);
+    setLeadFields((f) => ({ ...parsed.fields, ...f }));
     setUpload({ name: file.name, found: parsed.emails.length, duplicates: parsed.duplicates, invalid: parsed.invalid.length });
     clearError("recipients");
-    toast.success(`${parsed.emails.length} email addresses detected`, file.name);
+    toast.success(
+      `${parsed.emails.length} email addresses detected`,
+      parsed.columns.length ? `${file.name} · personalize with ${parsed.columns.join(", ")}` : file.name,
+    );
+  };
+
+  const insertVariable = (token: string) => {
+    if (insertTarget.current === "subject" && subjectRef.current) {
+      const el = subjectRef.current;
+      const start = el.selectionStart ?? subject.length;
+      const end = el.selectionEnd ?? start;
+      setSubject(subject.slice(0, start) + token + subject.slice(end));
+      requestAnimationFrame(() => {
+        el.focus();
+        el.setSelectionRange(start + token.length, start + token.length);
+      });
+    } else {
+      editorRef.current?.insert(token);
+    }
   };
 
   const validate = (): boolean => {
@@ -90,7 +118,7 @@ export function ComposePage() {
         senderId: senderId || undefined,
         subject: subject.trim(),
         body,
-        recipients,
+        recipients: recipients.map((email) => (leadFields[email] ? { email, fields: leadFields[email] } : email)),
         startAt: (sendAt ?? new Date()).toISOString(),
         delayBetweenEmailsSec: delaySec ? Number(delaySec) : 0,
         hourlyLimit: hourlyLimit ? Number(hourlyLimit) : (meta?.limits.maxEmailsPerHourPerSender ?? 200),
@@ -223,6 +251,8 @@ export function ComposePage() {
           <div className="flex items-center gap-3">
             <span className={label}>Subject</span>
             <input
+              ref={subjectRef}
+              onFocus={() => (insertTarget.current = "subject")}
               value={subject}
               onChange={(e) => {
                 setSubject(e.target.value);
@@ -275,7 +305,13 @@ export function ComposePage() {
           {(errors.delay ?? errors.limit) && <span className="text-sm text-red-600">{errors.delay ?? errors.limit}</span>}
         </div>
 
+        <div className="pb-3">
+          <PersonalizePanel columns={columns} recipients={recipients} fields={leadFields} subject={subject} body={body} onInsert={insertVariable} />
+        </div>
+
         <RichTextEditor
+          ref={editorRef}
+          onFocus={() => (insertTarget.current = "body")}
           value={body}
           onChange={(html) => {
             setBody(html);
@@ -285,6 +321,7 @@ export function ComposePage() {
           invalid={!!errors.body}
         />
         {errors.body && <p className="pt-1 text-sm text-red-600">{errors.body}</p>}
+
       </div>
     </div>
   );

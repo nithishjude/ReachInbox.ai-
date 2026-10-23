@@ -64,6 +64,11 @@ CREATE TABLE IF NOT EXISTS emails (
   UNIQUE (campaign_id, recipient)               -- a lead appears once per campaign
 );
 
+-- Which worker instance (host:pid) sent the email: evidence for multi-worker behaviour.
+ALTER TABLE emails ADD COLUMN IF NOT EXISTS processed_by TEXT;
+-- Personalization variables of the lead (CSV columns), kept for auditing / preview.
+ALTER TABLE emails ADD COLUMN IF NOT EXISTS variables JSONB NOT NULL DEFAULT '{}';
+
 CREATE INDEX IF NOT EXISTS emails_user_status_next_idx ON emails (user_id, status, next_attempt_at);
 CREATE INDEX IF NOT EXISTS emails_user_sent_idx ON emails (user_id, sent_at DESC);
 CREATE INDEX IF NOT EXISTS emails_pending_idx ON emails (status) WHERE status IN ('scheduled', 'rate_limited', 'sending');
