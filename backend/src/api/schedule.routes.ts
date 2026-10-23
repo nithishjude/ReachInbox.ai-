@@ -1,0 +1,150 @@
+import { Router } from "express";
+import { z } from "zod";
+import { env } from "../config/env";
+import { countByKind, createCampaign, getEmailForUser, listEmails, ListKind } from "../db/emails.repo";
+import { listSenders } from "../mail/senders";
+import { enqueueEmails } from "../queue/queue";
+import { getSenderUsage } from "../rateLimiter/hourlyLimiter";
+import { asyncHandler } from "./asyncHandler";
+
+export const emailsRouter = Router();
+
+const MAX_RECIPIENTS = 10_000;
+const emailSchema = z.string().trim().toLowerCase().email();
+
+const scheduleSchema = z.object({
+  senderId: z.string().uuid().optional(),
+  subject: z.string().trim().min(1, "Subject is required").max(300),
+  body: z.string().trim().min(1, "Body is required").max(50_000),
+  recipients: z.array(z.string()).min(1, "Add at least one recipient").max(MAX_RECIPIENTS),
+  startAt: z.coerce.date().optional(),
+  delayBetweenEmailsSec: z.coerce.number().min(0).max(24 * 3600).default(0),
+  hourlyLimit: z.coerce.number().int().min(1).max(100_000).optional(),
+});
+
+/**
+ * POST /api/emails/schedule
+ * Persists a campaign + one row per recipient, then enqueues one delayed BullMQ job per row.
+ * The DB write commits first; if enqueueing were interrupted, reconcileQueue() re-adds the
+ * missing jobs on next boot (job ids are deterministic, so nothing is duplicated).
+ */
+emailsRouter.post(
+  "/schedule",
+  asyncHandler(async (req, res) => {
+    const parsed = scheduleSchema.safeParse(req.body);
+    if (!parsed.success) {
+      res.status(400).json({ error: parsed.error.issues[0]?.message ?? "Invalid request", issues: parsed.error.issues });
+      return;
+    }
+    const input = parsed.data;
+
+    // Validate + de-duplicate recipients (case-insensitive), keeping first-seen order.
+    const seen = new Set<string>();
+    const invalid: string[] = [];
+    for (const raw of input.recipients) {
+      const r = emailSchema.safeParse(raw);
+      if (!r.success) invalid.push(raw);
+      else seen.add(r.data);
+    }
+    const recipients = [...seen];
+    if (recipients.length === 0) {
+      res.status(400).json({ error: "No valid email addresses found", invalid });
+      return;
+    }
+
+    const senders = await listSenders();
+    const sender = input.senderId ? senders.find((s) => s.id === input.senderId) : senders[0];
+    if (!sender) {
+      res.status(400).json({ error: "Unknown sender" });
+      return;
+    }
+
+    const startAt = input.startAt && input.startAt.getTime() > Date.now() ? input.startAt : new Date();
+    const { campaignId, emails } = await createCampaign({
+      userId: req.user!.id,
+      senderId: sender.id,
+      subject: input.subject,
+      body: input.body,
+      startAt,
+      delayMs: Math.round(input.delayBetweenEmailsSec * 1000),
+      hourlyLimit: input.hourlyLimit ?? env.MAX_EMAILS_PER_HOUR_PER_SENDER,
+      recipients,
+    });
+
+    await enqueueEmails(emails.map((e) => ({ emailId: e.id, runAt: new Date(e.next_attempt_at) })));
+
+    res.status(201).json({
+      campaignId,
+      scheduled: emails.length,
+      duplicatesRemoved: input.recipients.length - invalid.length - recipients.length,
+      invalid,
+      sender,
+      firstSendAt: emails[0].next_attempt_at,
+      lastSendAt: emails[emails.length - 1].next_attempt_at,
+    });
+  }),
+);
+
+const listQuery = z.object({
+  search: z.string().trim().max(200).optional(),
+  page: z.coerce.number().int().min(1).default(1),
+  pageSize: z.coerce.number().int().min(1).max(200).default(50),
+});
+
+const listHandler = (kind: ListKind) =>
+  asyncHandler(async (req, res) => {
+    const q = listQuery.parse(req.query);
+    const { items, total } = await listEmails({
+      userId: req.user!.id,
+      kind,
+      search: q.search || undefined,
+      limit: q.pageSize,
+      offset: (q.page - 1) * q.pageSize,
+    });
+    res.json({ items, total, page: q.page, pageSize: q.pageSize });
+  });
+
+emailsRouter.get("/scheduled", listHandler("scheduled"));
+emailsRouter.get("/sent", listHandler("sent"));
+
+emailsRouter.get(
+  "/stats",
+  asyncHandler(async (req, res) => {
+    res.json(await countByKind(req.user!.id));
+  }),
+);
+
+emailsRouter.get(
+  "/:id",
+  asyncHandler(async (req, res) => {
+    if (!z.string().uuid().safeParse(req.params.id).success) {
+      res.status(404).json({ error: "Email not found" });
+      return;
+    }
+    const email = await getEmailForUser(req.user!.id, req.params.id);
+    if (!email) {
+      res.status(404).json({ error: "Email not found" });
+      return;
+    }
+    res.json(email);
+  }),
+);
+
+export const metaRouter = Router();
+
+/** Senders for the "From" dropdown + server-side limits so the UI can show sensible defaults. */
+metaRouter.get(
+  "/senders",
+  asyncHandler(async (_req, res) => {
+    const senders = await listSenders();
+    const withUsage = await Promise.all(senders.map(async (s) => ({ ...s, usage: await getSenderUsage(s.id) })));
+    res.json({
+      senders: withUsage,
+      limits: {
+        maxEmailsPerHourPerSender: env.MAX_EMAILS_PER_HOUR_PER_SENDER,
+        minDelayBetweenSendsMs: env.MIN_DELAY_BETWEEN_SENDS_MS,
+        workerConcurrency: env.WORKER_CONCURRENCY,
+      },
+    });
+  }),
+);

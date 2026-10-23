@@ -1,0 +1,43 @@
+{
+  "name": "reachinbox-scheduler-backend",
+  "version": "1.0.0",
+  "private": true,
+  "description": "Email job scheduler: Express API + BullMQ worker + Postgres + Ethereal SMTP",
+  "scripts": {
+    "dev": "tsx watch src/index.ts",
+    "dev:api": "tsx watch src/server.ts",
+    "dev:worker": "tsx watch src/workerMain.ts",
+    "build": "tsc -p tsconfig.json && node -e \"require('fs').copyFileSync('src/db/schema.sql','dist/db/schema.sql')\"",
+    "start": "node dist/index.js",
+    "start:api": "node dist/server.js",
+    "start:worker": "node dist/workerMain.js",
+    "typecheck": "tsc --noEmit -p tsconfig.json",
+    "load-test": "tsx scripts/loadTest.ts"
+  },
+  "dependencies": {
+    "@bull-board/api": "^6.5.3",
+    "@bull-board/express": "^6.5.3",
+    "bullmq": "^5.34.0",
+    "cookie-parser": "^1.4.7",
+    "cors": "^2.8.5",
+    "dotenv": "^16.4.7",
+    "express": "^4.21.2",
+    "google-auth-library": "^9.15.0",
+    "ioredis": "^5.4.2",
+    "jsonwebtoken": "^9.0.2",
+    "nodemailer": "^6.9.16",
+    "pg": "^8.13.1",
+    "zod": "^3.24.1"
+  },
+  "devDependencies": {
+    "@types/cookie-parser": "^1.4.8",
+    "@types/cors": "^2.8.17",
+    "@types/express": "^4.17.21",
+    "@types/jsonwebtoken": "^9.0.7",
+    "@types/node": "^22.10.2",
+    "@types/nodemailer": "^6.4.17",
+    "@types/pg": "^8.11.10",
+    "tsx": "^4.19.2",
+    "typescript": "^5.7.2"
+  }
+}

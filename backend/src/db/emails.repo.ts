@@ -1,0 +1,207 @@
+import { pool, withTransaction } from "./client";
+
+export type EmailStatus = "scheduled" | "rate_limited" | "sending" | "sent" | "failed";
+
+export interface EmailRow {
+  id: string;
+  campaign_id: string;
+  user_id: string;
+  sender_id: string;
+  seq: number;
+  recipient: string;
+  subject: string;
+  body: string;
+  scheduled_at: Date;
+  next_attempt_at: Date;
+  status: EmailStatus;
+  attempts: number;
+  sent_at: Date | null;
+  message_id: string | null;
+  preview_url: string | null;
+  error: string | null;
+  updated_at: Date;
+}
+
+export interface EmailWithLimits extends EmailRow {
+  hourly_limit: number;
+}
+
+export interface CreateCampaignInput {
+  userId: string;
+  senderId: string;
+  subject: string;
+  body: string;
+  startAt: Date;
+  delayMs: number;
+  hourlyLimit: number;
+  recipients: string[];
+}
+
+export interface CreatedEmail {
+  id: string;
+  next_attempt_at: Date;
+}
+
+/**
+ * Creates the campaign and all its email rows in a single transaction.
+ * Recipient i is planned at startAt + i * delayMs. Rows are inserted with one
+ * UNNEST-based statement, so 1000+ leads cost a single round trip.
+ */
+export async function createCampaign(input: CreateCampaignInput): Promise<{ campaignId: string; emails: CreatedEmail[] }> {
+  return withTransaction(async (client) => {
+    const { rows: [campaign] } = await client.query<{ id: string }>(
+      `INSERT INTO campaigns (user_id, sender_id, subject, body, start_at, delay_ms, hourly_limit, total)
+       VALUES ($1, $2, $3, $4, $5, $6, $7, $8) RETURNING id`,
+      [input.userId, input.senderId, input.subject, input.body, input.startAt, input.delayMs, input.hourlyLimit, input.recipients.length],
+    );
+
+    const seqs = input.recipients.map((_, i) => i);
+    const times = seqs.map((i) => new Date(input.startAt.getTime() + i * input.delayMs).toISOString());
+
+    const { rows } = await client.query<CreatedEmail>(
+      `INSERT INTO emails (campaign_id, user_id, sender_id, seq, recipient, subject, body, scheduled_at, next_attempt_at)
+       SELECT $1, $2, $3, r.seq, r.recipient, $4, $5, r.at, r.at
+       FROM UNNEST($6::int[], $7::text[], $8::timestamptz[]) AS r(seq, recipient, at)
+       RETURNING id, next_attempt_at`,
+      [campaign.id, input.userId, input.senderId, input.subject, input.body, seqs, input.recipients, times],
+    );
+    return { campaignId: campaign.id, emails: rows };
+  });
+}
+
+export async function getEmailForSend(id: string): Promise<EmailWithLimits | undefined> {
+  const { rows } = await pool.query<EmailWithLimits>(
+    `SELECT e.*, c.hourly_limit FROM emails e JOIN campaigns c ON c.id = e.campaign_id WHERE e.id = $1`,
+    [id],
+  );
+  return rows[0];
+}
+
+export async function markThrottled(id: string, status: "scheduled" | "rate_limited", nextAttemptAt: Date): Promise<void> {
+  await pool.query(
+    `UPDATE emails SET status = $2, next_attempt_at = $3, updated_at = now()
+     WHERE id = $1 AND status IN ('scheduled', 'rate_limited')`,
+    [id, status, nextAttemptAt],
+  );
+}
+
+/**
+ * Idempotency guard. Atomically moves a row into 'sending' only if it hasn't been picked up yet.
+ * If two workers ever race on the same email, exactly one UPDATE matches; the other gets null.
+ */
+export async function claimForSending(id: string): Promise<EmailRow | null> {
+  const { rows } = await pool.query<EmailRow>(
+    `UPDATE emails SET status = 'sending', attempts = attempts + 1, updated_at = now()
+     WHERE id = $1 AND status IN ('scheduled', 'rate_limited')
+     RETURNING *`,
+    [id],
+  );
+  return rows[0] ?? null;
+}
+
+export async function markSent(id: string, messageId: string, previewUrl: string | null): Promise<void> {
+  await pool.query(
+    `UPDATE emails SET status = 'sent', sent_at = now(), message_id = $2, preview_url = $3, error = NULL, updated_at = now()
+     WHERE id = $1 AND status = 'sending'`,
+    [id, messageId, previewUrl],
+  );
+}
+
+export async function markFailed(id: string, error: string): Promise<void> {
+  await pool.query(
+    `UPDATE emails SET status = 'failed', sent_at = now(), error = $2, updated_at = now()
+     WHERE id = $1 AND status IN ('sending', 'scheduled', 'rate_limited')`,
+    [id, error.slice(0, 1000)],
+  );
+}
+
+/** SMTP rejected the message before accepting it -> safe to let BullMQ retry. */
+export async function releaseForRetry(id: string, error: string): Promise<void> {
+  await pool.query(
+    `UPDATE emails SET status = 'scheduled', error = $2, updated_at = now() WHERE id = $1 AND status = 'sending'`,
+    [id, error.slice(0, 1000)],
+  );
+}
+
+/** Rows the queue must know about; used to repair Redis after data loss. */
+export async function listPendingForReconcile(): Promise<{ id: string; next_attempt_at: Date }[]> {
+  const { rows } = await pool.query(
+    `SELECT id, next_attempt_at FROM emails WHERE status IN ('scheduled', 'rate_limited') ORDER BY next_attempt_at, seq`,
+  );
+  return rows;
+}
+
+// ---------- Dashboard queries ----------
+
+export interface EmailListItem {
+  id: string;
+  recipient: string;
+  subject: string;
+  body: string;
+  status: EmailStatus;
+  scheduled_at: Date;
+  next_attempt_at: Date;
+  sent_at: Date | null;
+  error: string | null;
+  preview_url: string | null;
+  sender_name: string;
+  sender_email: string;
+}
+
+export type ListKind = "scheduled" | "sent";
+
+const LIST_FILTERS: Record<ListKind, { statuses: EmailStatus[]; order: string }> = {
+  scheduled: { statuses: ["scheduled", "rate_limited", "sending"], order: "e.next_attempt_at ASC, e.seq ASC" },
+  sent: { statuses: ["sent", "failed"], order: "e.sent_at DESC NULLS LAST" },
+};
+
+export async function listEmails(params: {
+  userId: string;
+  kind: ListKind;
+  search?: string;
+  limit: number;
+  offset: number;
+}): Promise<{ items: EmailListItem[]; total: number }> {
+  const { statuses, order } = LIST_FILTERS[params.kind];
+  const values: unknown[] = [params.userId, statuses];
+  let where = "e.user_id = $1 AND e.status = ANY($2::email_status[])";
+  if (params.search) {
+    values.push(`%${params.search}%`);
+    where += ` AND (e.recipient ILIKE $${values.length} OR e.subject ILIKE $${values.length})`;
+  }
+
+  const [items, count] = await Promise.all([
+    pool.query<EmailListItem>(
+      `SELECT e.id, e.recipient, e.subject, e.body, e.status, e.scheduled_at, e.next_attempt_at, e.sent_at,
+              e.error, e.preview_url, s.name AS sender_name, s.email AS sender_email
+       FROM emails e JOIN senders s ON s.id = e.sender_id
+       WHERE ${where}
+       ORDER BY ${order}
+       LIMIT ${params.limit} OFFSET ${params.offset}`,
+      values,
+    ),
+    pool.query<{ count: string }>(`SELECT count(*) FROM emails e WHERE ${where}`, values),
+  ]);
+  return { items: items.rows, total: Number(count.rows[0].count) };
+}
+
+export async function countByKind(userId: string): Promise<Record<ListKind, number>> {
+  const { rows } = await pool.query<{ scheduled: string; sent: string }>(
+    `SELECT count(*) FILTER (WHERE status IN ('scheduled','rate_limited','sending')) AS scheduled,
+            count(*) FILTER (WHERE status IN ('sent','failed')) AS sent
+     FROM emails WHERE user_id = $1`,
+    [userId],
+  );
+  return { scheduled: Number(rows[0].scheduled), sent: Number(rows[0].sent) };
+}
+
+export async function getEmailForUser(userId: string, id: string): Promise<EmailListItem | undefined> {
+  const { rows } = await pool.query<EmailListItem>(
+    `SELECT e.id, e.recipient, e.subject, e.body, e.status, e.scheduled_at, e.next_attempt_at, e.sent_at,
+            e.error, e.preview_url, s.name AS sender_name, s.email AS sender_email
+     FROM emails e JOIN senders s ON s.id = e.sender_id
+     WHERE e.user_id = $1 AND e.id = $2`,
+    [userId, id],
+  );
+  return rows[0];
+}

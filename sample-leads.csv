@@ -1,0 +1,8 @@
+name,email,company
+Ava Thompson,ava.thompson@example.com,Acme
+Ben Ortiz,ben.ortiz@example.com,Globex
+Chloe Nguyen,chloe.nguyen@example.com,Initech
+Dev Mehta,dev.mehta@example.com,Umbrella
+Emma Rossi,emma.rossi@example.com,Hooli
+Ben Ortiz (dup),BEN.ORTIZ@example.com,Globex
+Broken Row,not-an-email@,Nowhere
