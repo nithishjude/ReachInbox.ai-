@@ -1,0 +1,25 @@
+flowchart TD
+  main["main.tsx<br/>Router · ToastProvider · AuthProvider"] --> App["App.tsx: routes + auth guards"]
+  App --> Login["/login<br/>LoginPage"]
+  App --> Dash["/ (?tab=scheduled|sent|campaigns)<br/>DashboardPage"]
+  App --> Compose["/compose<br/>ComposePage"]
+  App --> Email["/email/:id<br/>EmailPage"]
+  App --> Camp["/campaigns/:id<br/>CampaignPage"]
+
+  Dash --> Sidebar["Sidebar · UserMenu"]
+  Dash --> EmailList
+  Dash --> CampaignList
+  Compose --> RecipientInput
+  Compose --> RichTextEditor
+  Compose --> PersonalizePanel
+  Compose --> SendLaterPopover
+
+  subgraph data["Data layer"]
+    api["lib/api.ts<br/>typed fetch client"]
+    hooks["useEmails · usePolling<br/>(5 s polling, stale-response guard)"]
+    types["types/email.ts"]
+  end
+  Dash -.-> hooks
+  Camp -.-> hooks
+  hooks -.-> api
+  Compose -.-> api

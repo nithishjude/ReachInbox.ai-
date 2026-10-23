@@ -1,0 +1,30 @@
+flowchart LR
+  subgraph Browser
+    UI["React dashboard<br/>(Vite, Tailwind)"]
+  end
+
+  subgraph API["Express API (TypeScript)"]
+    AUTH["Auth routes<br/>Google OAuth + JWT"]
+    SCHED["Email & campaign routes<br/>validate · persist · enqueue"]
+    BOARD["Bull Board<br/>/admin/queues (admins)"]
+  end
+
+  subgraph Workers["BullMQ workers (1..N processes)"]
+    W["Worker<br/>concurrency = WORKER_CONCURRENCY"]
+  end
+
+  PG[("PostgreSQL<br/>source of truth")]
+  RD[("Redis<br/>delayed jobs + rate-limit counters<br/>AOF persistence")]
+  SMTP["Ethereal SMTP<br/>(optional real SMTP)"]
+  G["Google OAuth"]
+
+  UI -- "/api (cookie session)" --> AUTH
+  UI -- "/api" --> SCHED
+  AUTH <--> G
+  SCHED -- "1 transaction:<br/>campaign + N emails" --> PG
+  SCHED -- "addBulk delayed jobs<br/>jobId = email-&lt;uuid&gt;" --> RD
+  RD -- "job due" --> W
+  W -- "Lua: reserve send slot" --> RD
+  W -- "claim / mark sent" --> PG
+  W -- "send" --> SMTP
+  BOARD --> RD

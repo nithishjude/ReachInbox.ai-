@@ -1,0 +1,13 @@
+stateDiagram-v2
+  [*] --> scheduled: POST /schedule
+  scheduled --> sending: worker claims (atomic UPDATE)
+  scheduled --> rate_limited: hourly limit reached
+  rate_limited --> sending: next window opens
+  sending --> sent: SMTP accepted
+  sending --> scheduled: transient error (network, 4xx), retried with backoff
+  sending --> failed: permanent (5xx) or out of attempts
+  sending --> failed: worker died mid-send (at-most-once)
+  failed --> scheduled: user clicks Retry
+  scheduled --> [*]: cancelled (DELETE)
+  rate_limited --> [*]: cancelled (DELETE)
+  sent --> [*]

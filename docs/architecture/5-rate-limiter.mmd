@@ -1,0 +1,14 @@
+flowchart TD
+  A["Job is due"] --> B{"Already holds a<br/>reserved slot that's now due?"}
+  B -- yes --> SEND["Claim row, then send"]
+  B -- no --> L["Lua script (atomic, uses Redis TIME)"]
+  L --> S1["slot = max(now, nextFree[sender])<br/>window = floor(slot / 1h)"]
+  S1 --> C1{"senderCount[window]<br/>≥ sender limit?"}
+  C1 -- yes --> LIM["LIMITED: retry at the start of the next window"]
+  C1 -- no --> C2{"campaignCount[window]<br/>≥ campaign limit?"}
+  C2 -- yes --> LIM
+  C2 -- no --> RES["counters++, nextFree = slot + gap<br/>RESERVED(slot)"]
+  RES --> D{"slot ≈ now?"}
+  D -- yes --> SEND
+  D -- no --> DEL["moveToDelayed(slot), storing the reservation<br/>(waits in Redis, not in a sleeping worker)"]
+  LIM --> RL["status = rate_limited<br/>moveToDelayed(nextWindow + seq × 25 ms)<br/>order preserved, never dropped"]

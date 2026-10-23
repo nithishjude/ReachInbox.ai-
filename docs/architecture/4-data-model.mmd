@@ -1,0 +1,51 @@
+erDiagram
+  USERS ||--o{ CAMPAIGNS : creates
+  USERS ||--o{ EMAILS : owns
+  SENDERS ||--o{ CAMPAIGNS : "sends from"
+  CAMPAIGNS ||--|{ EMAILS : contains
+
+  USERS {
+    uuid id PK
+    text google_sub UK
+    text email
+    text name
+    text avatar_url
+  }
+  SENDERS {
+    uuid id PK
+    text name
+    text email UK
+    text smtp_host
+    int smtp_port
+    text smtp_user
+    text smtp_pass
+  }
+  CAMPAIGNS {
+    uuid id PK
+    uuid user_id FK
+    uuid sender_id FK
+    text subject "template with variables"
+    text body "template with variables"
+    timestamptz start_at
+    int delay_ms
+    int hourly_limit
+    int total
+  }
+  EMAILS {
+    uuid id PK "also the BullMQ job id"
+    uuid campaign_id FK
+    int seq "position, preserves order"
+    text recipient "unique per campaign"
+    text subject "rendered for this lead"
+    text body "rendered for this lead"
+    jsonb variables "lead CSV columns"
+    timestamptz scheduled_at "requested time"
+    timestamptz next_attempt_at "moves when throttled"
+    email_status status
+    int attempts
+    timestamptz sent_at
+    text message_id
+    text preview_url "Ethereal link"
+    text processed_by "worker host:pid"
+    text error
+  }
