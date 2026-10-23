@@ -31,6 +31,18 @@ export interface EnqueueItem {
   runAt: Date;
 }
 
+/**
+ * Re-enqueue emails the user chose to retry. Their previous job is still kept in the failed set
+ * under the same id (which would make a plain add a no-op), so remove it first.
+ */
+export async function requeueEmails(items: EnqueueItem[]): Promise<void> {
+  for (const { emailId } of items) {
+    const old = await emailQueue.getJob(jobIdFor(emailId));
+    if (old) await old.remove();
+  }
+  await enqueueEmails(items);
+}
+
 const ADD_BULK_CHUNK = 500;
 
 /** Enqueue delayed jobs in chunks so 1000+ emails don't produce one giant Redis pipeline. */

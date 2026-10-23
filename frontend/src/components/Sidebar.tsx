@@ -1,5 +1,7 @@
+import { Clock3, Send, type LucideIcon } from "lucide-react";
 import type { EmailStats, ListKind } from "../types/email";
-import { Button } from "./ui/Button";
+import { Logo } from "./Logo";
+import { UserMenu } from "./UserMenu";
 
 interface SidebarProps {
   active: ListKind;
@@ -8,58 +10,48 @@ interface SidebarProps {
   onCompose: () => void;
 }
 
-const tabs: { kind: ListKind; label: string; icon: JSX.Element }[] = [
-  {
-    kind: "scheduled",
-    label: "Scheduled",
-    icon: (
-      <svg viewBox="0 0 24 24" className="h-5 w-5" fill="none" stroke="currentColor" strokeWidth="1.8">
-        <circle cx="12" cy="12" r="9" />
-        <path d="M12 7v5l3 2" strokeLinecap="round" />
-      </svg>
-    ),
-  },
-  {
-    kind: "sent",
-    label: "Sent",
-    icon: (
-      <svg viewBox="0 0 24 24" className="h-5 w-5" fill="none" stroke="currentColor" strokeWidth="1.8">
-        <path d="M21 3 10 14M21 3l-7 18-4-7-7-4 18-7z" strokeLinejoin="round" />
-      </svg>
-    ),
-  },
+const tabs: { kind: ListKind; label: string; icon: LucideIcon }[] = [
+  { kind: "scheduled", label: "Scheduled", icon: Clock3 },
+  { kind: "sent", label: "Sent", icon: Send },
 ];
 
 export function Sidebar({ active, stats, onSelect, onCompose }: SidebarProps) {
   return (
-    <aside className="w-full shrink-0 border-ink-200 bg-white p-4 md:min-h-[calc(100vh-4rem)] md:w-64 md:border-r">
-      <Button variant="outline" size="lg" className="w-full" onClick={onCompose} icon={<span className="text-xl leading-none">+</span>}>
-        Compose New Email
-      </Button>
+    <div className="flex h-full flex-col gap-3 px-3 py-6">
+      <div className="px-3 pb-2">
+        <Logo />
+      </div>
 
-      <p className="mb-2 mt-6 hidden px-3 text-xs font-semibold uppercase tracking-wider text-ink-400 md:block">Core</p>
-      <nav className="mt-3 flex gap-2 md:mt-0 md:flex-col md:gap-1" role="tablist">
-        {tabs.map((t) => {
-          const selected = t.kind === active;
+      <UserMenu />
+
+      <button
+        onClick={onCompose}
+        className="focus-ring h-11 w-full rounded-full border border-brand-600 text-[17px] font-medium text-brand-600 transition-colors hover:bg-brand-50 dark:hover:bg-brand-600/10"
+      >
+        Compose
+      </button>
+
+      <nav className="mt-4" role="tablist" aria-label="Mailboxes">
+        <p className="px-5 pb-2 text-sm uppercase text-fg-subtle">Core</p>
+        {tabs.map(({ kind, label, icon: Icon }) => {
+          const selected = kind === active;
           return (
             <button
-              key={t.kind}
+              key={kind}
               role="tab"
               aria-selected={selected}
-              onClick={() => onSelect(t.kind)}
-              className={`flex flex-1 items-center gap-3 rounded-lg px-3 py-2.5 text-sm font-medium transition-colors md:flex-none ${
-                selected ? "bg-brand-50 text-brand-700" : "text-ink-700 hover:bg-ink-50"
+              onClick={() => onSelect(kind)}
+              className={`focus-ring mb-1 flex w-full items-center gap-3.5 rounded-xl px-5 py-3 text-[17px] transition-colors ${
+                selected ? "bg-brand-50 font-semibold text-fg dark:bg-brand-600/15" : "text-fg hover:bg-subtle"
               }`}
             >
-              {t.icon}
-              <span className="flex-1 text-left">{t.label}</span>
-              <span className={`rounded-full px-2 py-0.5 text-xs ${selected ? "bg-brand-100" : "bg-ink-100 text-ink-500"}`}>
-                {stats ? stats[t.kind] : "–"}
-              </span>
+              <Icon className="h-5 w-5 text-fg-muted" strokeWidth={1.75} />
+              <span className="flex-1 text-left">{label}</span>
+              <span className="text-sm font-normal tabular-nums text-fg-muted">{stats ? stats[kind].toLocaleString() : ""}</span>
             </button>
           );
         })}
       </nav>
-    </aside>
+    </div>
   );
 }

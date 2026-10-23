@@ -14,47 +14,77 @@ export interface SenderRow {
   smtp_pass: string;
 }
 
-export type PublicSender = Pick<SenderRow, "id" | "name" | "email">;
+export interface PublicSender extends Pick<SenderRow, "id" | "name" | "email"> {
+  /** true = real SMTP provider (e.g. Gmail) that delivers to real inboxes; false = Ethereal test inbox. */
+  real: boolean;
+}
 
-const ETHEREAL = { host: "smtp.ethereal.email", port: 587, secure: false };
+interface SmtpServer {
+  host: string;
+  port: number;
+  secure: boolean;
+}
+
+const ETHEREAL: SmtpServer = { host: "smtp.ethereal.email", port: 587, secure: false };
 const SENDER_NAMES = ["Oliver Brooks", "Maya Patel", "Liam Carter", "Sofia Reyes", "Noah Kim"];
 
-const envSendersSchema = z.array(z.object({ name: z.string().min(1), user: z.string().email(), pass: z.string().min(1) }));
+const etherealSendersSchema = z.array(z.object({ name: z.string().min(1), user: z.string().email(), pass: z.string().min(1) }));
 
-async function insertSender(name: string, user: string, pass: string): Promise<void> {
+// Real providers. Defaults are Gmail's (SSL on 465); `pass` must be a Gmail App Password.
+const smtpSendersSchema = z.array(
+  z.object({
+    name: z.string().min(1),
+    user: z.string().email(),
+    pass: z.string().min(1),
+    host: z.string().min(1).default("smtp.gmail.com"),
+    port: z.number().int().positive().default(465),
+    secure: z.boolean().default(true),
+  }),
+);
+
+async function upsertSender(name: string, user: string, pass: string, server: SmtpServer): Promise<void> {
   await pool.query(
     `INSERT INTO senders (name, email, smtp_host, smtp_port, smtp_secure, smtp_user, smtp_pass)
      VALUES ($1, $2, $3, $4, $5, $2, $6)
-     ON CONFLICT (email) DO UPDATE SET name = EXCLUDED.name, smtp_pass = EXCLUDED.smtp_pass`,
-    [name, user, ETHEREAL.host, ETHEREAL.port, ETHEREAL.secure, pass],
+     ON CONFLICT (email) DO UPDATE
+       SET name = EXCLUDED.name, smtp_host = EXCLUDED.smtp_host, smtp_port = EXCLUDED.smtp_port,
+           smtp_secure = EXCLUDED.smtp_secure, smtp_pass = EXCLUDED.smtp_pass`,
+    [name, user, server.host, server.port, server.secure, pass],
   );
 }
 
 /**
- * Makes sure at least one SMTP sender exists.
- * - ETHEREAL_SENDERS (JSON) wins if provided.
- * - Otherwise Ethereal test accounts are created once and persisted, so restarts reuse them
- *   (and previously sent messages stay viewable in the same Ethereal inboxes).
+ * Makes sure the configured SMTP senders exist.
+ * - Ethereal (test inboxes, the default): ETHEREAL_SENDERS (JSON) if provided, otherwise
+ *   ETHEREAL_SENDER_COUNT accounts are created once and persisted, so restarts reuse them.
+ * - SMTP_SENDERS (optional JSON): real providers such as Gmail, which deliver to real inboxes.
  */
 export async function ensureSenders(): Promise<void> {
   if (env.ETHEREAL_SENDERS) {
-    const parsed = envSendersSchema.parse(JSON.parse(env.ETHEREAL_SENDERS));
-    for (const s of parsed) await insertSender(s.name, s.user, s.pass);
-    return;
+    for (const s of etherealSendersSchema.parse(JSON.parse(env.ETHEREAL_SENDERS))) await upsertSender(s.name, s.user, s.pass, ETHEREAL);
+  } else {
+    const { rows } = await pool.query<{ count: string }>("SELECT count(*) FROM senders WHERE smtp_host = $1", [ETHEREAL.host]);
+    const existing = Number(rows[0].count);
+    for (let i = 0; i < env.ETHEREAL_SENDER_COUNT - existing; i++) {
+      const account = await nodemailer.createTestAccount();
+      await upsertSender(SENDER_NAMES[(existing + i) % SENDER_NAMES.length], account.user, account.pass, ETHEREAL);
+      console.log(`[senders] created Ethereal account ${account.user} (pass: ${account.pass})`);
+    }
   }
 
-  const { rows } = await pool.query<{ count: string }>("SELECT count(*) FROM senders");
-  const missing = env.ETHEREAL_SENDER_COUNT - Number(rows[0].count);
-  for (let i = 0; i < missing; i++) {
-    const account = await nodemailer.createTestAccount();
-    const name = SENDER_NAMES[(Number(rows[0].count) + i) % SENDER_NAMES.length];
-    await insertSender(name, account.user, account.pass);
-    console.log(`[senders] created Ethereal account ${account.user} (pass: ${account.pass})`);
+  if (env.SMTP_SENDERS) {
+    for (const s of smtpSendersSchema.parse(JSON.parse(env.SMTP_SENDERS))) {
+      await upsertSender(s.name, s.user, s.pass, s);
+      console.log(`[senders] real SMTP sender ready: ${s.user} via ${s.host}:${s.port}`);
+    }
   }
 }
 
 export async function listSenders(): Promise<PublicSender[]> {
-  const { rows } = await pool.query<PublicSender>("SELECT id, name, email FROM senders ORDER BY created_at, email");
+  const { rows } = await pool.query<PublicSender>(
+    "SELECT id, name, email, smtp_host <> $1 AS real FROM senders ORDER BY (smtp_host <> $1), created_at, email",
+    [ETHEREAL.host],
+  );
   return rows;
 }
 

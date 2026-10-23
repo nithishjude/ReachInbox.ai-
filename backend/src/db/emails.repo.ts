@@ -123,6 +123,21 @@ export async function releaseForRetry(id: string, error: string): Promise<void> 
   );
 }
 
+/**
+ * Deletes an email (cancels it if it hasn't gone out yet). Rows mid-send are refused so we never
+ * lose track of an SMTP call in flight. The queued job may still wake up later; the worker then
+ * finds no row and skips it.
+ */
+export async function deleteEmail(userId: string, id: string): Promise<"deleted" | "not_found" | "sending"> {
+  const { rows } = await pool.query<{ status: EmailStatus }>(
+    `DELETE FROM emails WHERE id = $1 AND user_id = $2 AND status <> 'sending' RETURNING status`,
+    [id, userId],
+  );
+  if (rows.length) return "deleted";
+  const { rows: existing } = await pool.query("SELECT 1 FROM emails WHERE id = $1 AND user_id = $2", [id, userId]);
+  return existing.length ? "sending" : "not_found";
+}
+
 /** Rows the queue must know about; used to repair Redis after data loss. */
 export async function listPendingForReconcile(): Promise<{ id: string; next_attempt_at: Date }[]> {
   const { rows } = await pool.query(
@@ -158,12 +173,15 @@ const LIST_FILTERS: Record<ListKind, { statuses: EmailStatus[]; order: string }>
 export async function listEmails(params: {
   userId: string;
   kind: ListKind;
+  /** Optional narrowing inside the tab, e.g. only 'failed' in the Sent tab. */
+  status?: EmailStatus;
   search?: string;
   limit: number;
   offset: number;
 }): Promise<{ items: EmailListItem[]; total: number }> {
   const { statuses, order } = LIST_FILTERS[params.kind];
-  const values: unknown[] = [params.userId, statuses];
+  const filtered = params.status ? statuses.filter((s) => s === params.status) : statuses;
+  const values: unknown[] = [params.userId, filtered];
   let where = "e.user_id = $1 AND e.status = ANY($2::email_status[])";
   if (params.search) {
     values.push(`%${params.search}%`);
@@ -185,14 +203,51 @@ export async function listEmails(params: {
   return { items: items.rows, total: Number(count.rows[0].count) };
 }
 
-export async function countByKind(userId: string): Promise<Record<ListKind, number>> {
-  const { rows } = await pool.query<{ scheduled: string; sent: string }>(
-    `SELECT count(*) FILTER (WHERE status IN ('scheduled','rate_limited','sending')) AS scheduled,
-            count(*) FILTER (WHERE status IN ('sent','failed')) AS sent
+export interface EmailStats extends Record<ListKind, number> {
+  byStatus: Record<EmailStatus, number>;
+  sentLastHour: number;
+}
+
+export async function getStats(userId: string): Promise<EmailStats> {
+  const { rows } = await pool.query<Record<EmailStatus | "sent_last_hour", string>>(
+    `SELECT count(*) FILTER (WHERE status = 'scheduled')    AS scheduled,
+            count(*) FILTER (WHERE status = 'rate_limited') AS rate_limited,
+            count(*) FILTER (WHERE status = 'sending')      AS sending,
+            count(*) FILTER (WHERE status = 'sent')         AS sent,
+            count(*) FILTER (WHERE status = 'failed')       AS failed,
+            count(*) FILTER (WHERE status = 'sent' AND sent_at > now() - interval '1 hour') AS sent_last_hour
      FROM emails WHERE user_id = $1`,
     [userId],
   );
-  return { scheduled: Number(rows[0].scheduled), sent: Number(rows[0].sent) };
+  const r = rows[0];
+  const byStatus: Record<EmailStatus, number> = {
+    scheduled: Number(r.scheduled),
+    rate_limited: Number(r.rate_limited),
+    sending: Number(r.sending),
+    sent: Number(r.sent),
+    failed: Number(r.failed),
+  };
+  return {
+    scheduled: byStatus.scheduled + byStatus.rate_limited + byStatus.sending,
+    sent: byStatus.sent + byStatus.failed,
+    byStatus,
+    sentLastHour: Number(r.sent_last_hour),
+  };
+}
+
+/**
+ * Puts failed emails back in the queue, on explicit user request. Only 'failed' rows match,
+ * so this can never resurrect an email that was actually sent.
+ */
+export async function resetFailedForRetry(userId: string, ids: string[] | "all"): Promise<CreatedEmail[]> {
+  const { rows } = await pool.query<CreatedEmail>(
+    `UPDATE emails
+     SET status = 'scheduled', next_attempt_at = now(), attempts = 0, error = NULL, sent_at = NULL, updated_at = now()
+     WHERE user_id = $1 AND status = 'failed' ${ids === "all" ? "" : "AND id = ANY($2::uuid[])"}
+     RETURNING id, next_attempt_at`,
+    ids === "all" ? [userId] : [userId, ids],
+  );
+  return rows;
 }
 
 export async function getEmailForUser(userId: string, id: string): Promise<EmailListItem | undefined> {

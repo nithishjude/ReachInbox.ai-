@@ -24,6 +24,7 @@ const schema = z.object({
 
   ETHEREAL_SENDER_COUNT: z.coerce.number().int().min(1).max(10).default(3),
   ETHEREAL_SENDERS: z.string().optional(),
+  SMTP_SENDERS: z.string().optional(),
 
   WORKER_CONCURRENCY: z.coerce.number().int().min(1).max(100).default(5),
   MIN_DELAY_BETWEEN_SENDS_MS: z.coerce.number().int().min(0).default(2000),

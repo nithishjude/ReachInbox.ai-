@@ -1,9 +1,16 @@
 import { useCallback, useEffect, useRef, useState } from "react";
 import { api } from "../lib/api";
-import type { EmailItem, ListKind } from "../types/email";
+import type { EmailItem, EmailStatus, ListKind } from "../types/email";
 
 const POLL_MS = 5000;
-const PAGE_SIZE = 50;
+export const PAGE_SIZE = 25;
+
+interface Query {
+  kind: ListKind;
+  status?: EmailStatus;
+  search: string;
+  refreshKey: number;
+}
 
 interface UseEmailsResult {
   items: EmailItem[];
@@ -19,9 +26,9 @@ interface UseEmailsResult {
 
 /**
  * Loads one tab's emails and keeps them fresh by polling, so emails visibly move from
- * Scheduled to Sent while the worker runs. Stale responses are ignored.
+ * Scheduled to Sent while the worker runs. Responses that arrive out of order are ignored.
  */
-export function useEmails(kind: ListKind, search: string, refreshKey: number): UseEmailsResult {
+export function useEmails({ kind, status, search, refreshKey }: Query): UseEmailsResult {
   const [items, setItems] = useState<EmailItem[]>([]);
   const [total, setTotal] = useState(0);
   const [page, setPage] = useState(1);
@@ -33,9 +40,10 @@ export function useEmails(kind: ListKind, search: string, refreshKey: number): U
   const load = useCallback(
     async (background: boolean) => {
       const id = ++requestId.current;
-      background ? setRefreshing(true) : setLoading(true);
+      if (background) setRefreshing(true);
+      else setLoading(true);
       try {
-        const res = await api.listEmails(kind, { search, page, pageSize: PAGE_SIZE });
+        const res = await api.listEmails(kind, { search, status, page, pageSize: PAGE_SIZE });
         if (id !== requestId.current) return;
         setItems(res.items);
         setTotal(res.total);
@@ -50,11 +58,11 @@ export function useEmails(kind: ListKind, search: string, refreshKey: number): U
         }
       }
     },
-    [kind, search, page],
+    [kind, status, search, page],
   );
 
-  // Reset to page 1 when switching tab or search.
-  useEffect(() => setPage(1), [kind, search]);
+  // Back to page 1 whenever the filter changes.
+  useEffect(() => setPage(1), [kind, status, search]);
 
   useEffect(() => {
     void load(false);

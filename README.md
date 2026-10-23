@@ -21,11 +21,11 @@ reachinbox-scheduler/
 │   └── scripts/loadTest.ts      schedules 1000+ emails at once
 ├── frontend/                    Vite + React 18 + TypeScript + Tailwind
 │   └── src/
-│       ├── components/ui/       Button, Field/Input/Select/Textarea, Modal, Avatar, StatusBadge, Spinner, EmptyState
-│       ├── components/          Header, Sidebar, EmailTable, ComposeModal, EmailDetailModal, Logo
-│       ├── hooks/               useAuth, useToast, useEmails (polling), useDebounced
-│       ├── lib/                 api.ts (typed client), parseLeads.ts, format.ts
-│       ├── pages/               LoginPage, DashboardPage
+│       ├── components/ui/       Button, Avatar, StatusBadge, EmptyState, Spinner
+│       ├── components/          Sidebar, UserMenu, FilterMenu, EmailList, PageHeader, Logo, compose/ (RecipientInput, RichTextEditor, SendLaterPopover)
+│       ├── hooks/               useAuth, useToast, useTheme, useEmails (polling), useStarred, useDebounced
+│       ├── lib/                 api.ts (typed client), parseLeads.ts, html.ts (sanitise/plain text), format.ts
+│       ├── pages/               LoginPage, DashboardPage, ComposePage, EmailPage
 │       └── types/email.ts       API response / request types
 └── docker-compose.yml           Postgres 16 + Redis 7 (AOF persistence)
 ```
@@ -84,6 +84,19 @@ To pin your own accounts, create them at https://ethereal.email/create and set:
 ETHEREAL_SENDERS=[{"name":"Alice","user":"alice@ethereal.email","pass":"..."},{"name":"Bob","user":"bob@ethereal.email","pass":"..."}]
 ```
 
+### Optional: real delivery (Gmail or any SMTP provider)
+
+Ethereal is the default and is all the project needs. As an extra, you can add senders that deliver to **real inboxes**. They show up in the compose **From** dropdown labelled *real delivery*, with a warning. Sending goes through the same queue, rate limiter and idempotency guards; only the SMTP endpoint changes, which is how this engine would run in production.
+
+1. Turn on 2-Step Verification for your Google account, then create an **App Password** at https://myaccount.google.com/apppasswords.
+2. Add it to `backend/.env`. Use single quotes around the JSON. `host`/`port`/`secure` default to Gmail (`smtp.gmail.com:465`, SSL); set them for other providers:
+   ```env
+   SMTP_SENDERS='[{"name":"Your Name","user":"you@gmail.com","pass":"abcd efgh ijkl mnop"}]'
+   ```
+3. Restart the backend.
+
+Gmail allows about 500 emails per day. Use real senders only with addresses that expect your mail.
+
 ### Google OAuth
 
 1. Google Cloud Console → *APIs & Services* → *Credentials* → **Create OAuth client ID** → type **Web application**.
@@ -102,6 +115,7 @@ ETHEREAL_SENDERS=[{"name":"Alice","user":"alice@ethereal.email","pass":"..."},{"
 | `REDIS_URL` | redis://localhost:6379 | Redis (BullMQ + rate limiter) |
 | `GOOGLE_CLIENT_ID` / `GOOGLE_CLIENT_SECRET` / `GOOGLE_REDIRECT_URI` | – | OAuth |
 | `ETHEREAL_SENDER_COUNT` / `ETHEREAL_SENDERS` | 3 / – | Senders (see above) |
+| `SMTP_SENDERS` | – | Optional real-delivery senders, e.g. Gmail with an App Password (see above) |
 | `WORKER_CONCURRENCY` | 5 | Jobs processed in parallel per worker process |
 | `MIN_DELAY_BETWEEN_SENDS_MS` | **2000** | Minimum gap between two sends **from the same sender** |
 | `MAX_EMAILS_PER_HOUR_PER_SENDER` | **200** | Hard per-sender cap per clock hour |
@@ -123,10 +137,12 @@ All `/api/emails/*` and `/api/senders` routes require a session: the `ri_session
 | `GET /api/auth/me` | Current user `{ id, name, email, avatarUrl }` |
 | `POST /api/auth/logout` | Clears the session |
 | `POST /api/emails/schedule` | Creates a campaign and enqueues one delayed job per recipient (body below) |
-| `GET /api/emails/scheduled?search=&page=&pageSize=` | Emails with status `scheduled` / `rate_limited` / `sending`, soonest first |
-| `GET /api/emails/sent?search=&page=&pageSize=` | Emails with status `sent` / `failed`, newest first |
-| `GET /api/emails/stats` | `{ scheduled, sent }` counts for the sidebar |
+| `GET /api/emails/scheduled?search=&status=&page=&pageSize=` | Emails with status `scheduled` / `rate_limited` / `sending`, soonest first |
+| `GET /api/emails/sent?search=&status=&page=&pageSize=` | Emails with status `sent` / `failed`, newest first |
+| `GET /api/emails/stats` | Counts per status + sent in the last hour (dashboard cards) |
+| `POST /api/emails/retry` | Re-queue failed emails: `{ "ids": [...] }` or `{ "all": true }`. Only `failed` rows match, so a sent email can never be resent |
 | `GET /api/emails/:id` | One email (incl. error and Ethereal preview URL) |
+| `DELETE /api/emails/:id` | Cancel a scheduled email or delete one from history (refused while it is mid-send) |
 | `GET /api/senders` | Senders + current hourly usage + server limits |
 | `GET /health` | DB + Redis health |
 
@@ -239,24 +255,35 @@ Verified with `npm run load-test -- <email> 1000 50`:
 - [x] Hourly limits per sender (env) **and** per campaign (UI), Redis counters, rescheduling into the next window in order
 - [x] Retries with exponential backoff for transient SMTP errors; permanent failures marked `failed` with the error
 - [x] Live BullMQ dashboard (Bull Board) at `/admin/queues`
+- [x] Optional real-delivery senders (Gmail/any SMTP via `SMTP_SENDERS`) alongside Ethereal, through the same engine
+- [x] Manual retry of failed emails (single or all), safe by construction: only `failed` rows are re-queued
 - [x] Graceful shutdown that drains in-flight sends
 - [x] Load-test script
 
-### Frontend
-- [x] Real Google OAuth login (server-side code flow, CSRF `state`, ID token verification), redirect to the dashboard
-- [x] Header with avatar, name, email; menu with logout + queue dashboard link
-- [x] Sidebar with **Compose New Email** button and **Scheduled / Sent** tabs with live counts
-- [x] Compose modal: sender picker, subject, body, **CSV/TXT upload** (any column layout) + paste. Shows detected / duplicate / invalid counts, start time with presets, delay between emails, hourly limit, and a preview of the send window
-- [x] Scheduled table (email, subject, scheduled time, status incl. *Rate limited*) and Sent table (email, subject, sent time, sent/failed)
-- [x] Loading skeletons, empty states, error state with retry, toasts, search (debounced), pagination, 5 s auto-refresh
-- [x] Email detail modal with an Ethereal preview link and error details
-- [x] Reusable UI kit (`components/ui`), typed API client and types, responsive layout
+### Frontend (built to the provided Figma)
+- [x] **Login page** as in the Figma: card, "Login with Google" (real OAuth 2.0 code flow with CSRF `state` and ID-token verification), "or sign up through email" form. Only Google sign-in is enabled; the email form explains that
+- [x] **Dashboard**: ReachInbox pixel wordmark; user card with **avatar, name, email** and a menu (logout, dark mode, queue monitor); outlined **Compose** button; CORE → **Scheduled / Sent** with live counts
+- [x] Search bar (debounced), **status filter** (all / waiting / rate limited, or sent / failed) and refresh
+- [x] Email rows as in the Figma: `To:` recipient · orange 🕐 **send-time badge** (scheduled), amber *rate limited*, grey **Sent** or red **Failed** · subject - preview · ☆ star · sent time on the Sent tab
+- [x] **Email view page**: subject header, star, delete/cancel, sender avatar and address, recipient, date, rendered body, delivery status, error details, Ethereal preview link, **Retry** for failed emails
+- [x] **Compose page** as in the Figma: From (sender picker, incl. optional real-delivery senders), **To with email chips and "+N"**, typing/pasting addresses, **Upload List** (CSV/TXT, any column layout) with the **detected count** plus duplicate/invalid report, Subject, **Delay between 2 emails**, **Hourly Limit**, **rich-text editor** (undo/redo, size, bold/italic/underline, align, spacing, lists, indent, quote, strikethrough), 📎 upload shortcut
+- [x] **Send Later** popover: "Pick date & time" plus the Figma presets (Tomorrow; Tomorrow 10:00 AM, 11:00 AM, 3:00 PM); the button switches between **Send** and **Send Later**
+- [x] "N failed · Retry all failed" banner on the Sent tab
+- [x] Loading skeletons, empty states, error states with retry, toasts, pagination, 5 s auto-refresh
+- [x] Reusable components (`components/ui`: Button, Avatar, StatusBadge, EmptyState, Spinner; `components/compose`: RecipientInput, RichTextEditor, SendLaterPopover; PageHeader, Sidebar, UserMenu, FilterMenu, EmailList), typed API client and types, HTML bodies sanitised with DOMPurify before rendering, keyboard accessible
 
 ---
 
 ## 6. Assumptions, shortcuts & trade-offs
 
-* **Figma:** I didn't have access to the Figma file, so the UI follows ReachInbox's look: a white/green palette, sidebar with Compose and Scheduled/Sent, a list with status pills, and a modal compose. Spacing and colours are Tailwind tokens in `tailwind.config.js`, so it's easy to align pixel-for-pixel.
+* **Figma:** the UI follows the provided Figma screens (login, Scheduled/Sent lists, email view, compose, Send Later). Deliberate differences:
+  * The logo reads *ReachInbox* (same pixel style) instead of the placeholder *ONB*.
+  * The email/password form is shown but disabled, because the assignment requires Google login only.
+  * There's no archive icon, since archiving isn't a feature here.
+  * Rows show the recipient's address, since leads come from CSVs without names.
+  * Requirement-driven additions: the sent time, a detected-count line, the retry banner and status details.
+* **Stars** are a per-browser preference (localStorage), not stored in the database.
+* **Rich text:** the editor uses `contentEditable` + `execCommand`. That API is deprecated but universally supported, and it keeps the bundle small compared with a full editor framework.
 * **At-most-once on a hard crash mid-send** (see Idempotency). The alternative, at-least-once, would violate "never send twice". The window is a single SMTP call, and graceful shutdowns never hit it.
 * **Fixed clock-hour windows** instead of a sliding 60-minute window. They are simpler, exact, and cheap to reason about. The trade-off is that up to 2× the limit can go out across a window boundary (end of one hour + start of the next).
 * **A rate-limit slot is consumed at reservation.** If that send then fails, the slot isn't refunded, so the limiter errs on the side of sending fewer.
@@ -271,7 +298,7 @@ Verified with `npm run load-test -- <email> 1000 50`:
 ## 7. Demo script (for the video)
 
 1. `docker compose up -d`, `npm run dev` in backend and frontend. Log in with Google.
-2. **Compose** → upload `sample-leads.csv` (5 valid, 1 duplicate, 1 invalid) → subject/body → start "In 2 min", delay 5 s, hourly limit 3 → **Schedule**.
+2. **Compose** → **Upload List** → `sample-leads.csv` (5 detected, 1 duplicate, 1 invalid) → subject/body → delay `5`, hourly limit `3` → 🕐 **Pick date & time** about 2 minutes ahead → **Done** → **Send Later**.
 3. Show the **Scheduled** tab and Bull Board (`/admin/queues` → *Delayed*).
 4. **Restart:** stop the backend (Ctrl+C) before the start time, wait, start it again. The emails still send at their times and appear once in **Sent** (open the Ethereal preview).
 5. **Rate limit:** with a limit of 3, emails 4+ show **Rate limited** with a next-hour time. For load, run `npm run load-test -- you@gmail.com 1000 50` and show 50 slots 2 s apart while the rest wait for the next window.

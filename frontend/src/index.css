@@ -3,23 +3,70 @@
 @tailwind utilities;
 
 @layer base {
+  /* Space-separated RGB so Tailwind opacity modifiers (bg-surface/80) work. */
+  :root {
+    /* Figma: white canvas, #F4F5F4 fills, near-black text, grey secondary text */
+    --canvas: 255 255 255;
+    --surface: 255 255 255;
+    --subtle: 244 245 244;
+    --line: 232 232 232;
+    --fg: 31 31 31;
+    --fg-muted: 92 92 92;
+    --fg-subtle: 158 158 158;
+    color-scheme: light;
+  }
+  .dark {
+    --canvas: 9 11 16;
+    --surface: 17 20 27;
+    --subtle: 28 32 41;
+    --line: 39 44 56;
+    --fg: 236 239 244;
+    --fg-muted: 160 168 184;
+    --fg-subtle: 100 110 128;
+    color-scheme: dark;
+  }
+
   html,
   body,
   #root {
     height: 100%;
   }
+  body {
+    @apply bg-canvas text-fg antialiased;
+    font-feature-settings: "cv11", "ss01";
+  }
+  * {
+    @apply border-line;
+  }
 }
 
-@keyframes toast-in {
-  from {
-    opacity: 0;
-    transform: translateY(8px);
+@layer components {
+  /* Formatting produced by the rich-text editor, shared by the editor and the email view. */
+  .email-body ul {
+    @apply list-disc pl-6;
   }
-  to {
-    opacity: 1;
-    transform: translateY(0);
+  .email-body ol {
+    @apply list-decimal pl-6;
   }
-}
-.animate-toast-in {
-  animation: toast-in 0.18s ease-out;
+  .email-body blockquote {
+    @apply my-2 border-l-4 border-line pl-4 text-fg-muted;
+  }
+  .email-body p,
+  .email-body div {
+    min-height: 1em;
+  }
+  .email-body a {
+    @apply text-brand-600 underline;
+  }
+  .editor:empty::before {
+    content: attr(data-placeholder);
+    @apply pointer-events-none text-fg-subtle;
+  }
+
+  .card {
+    @apply rounded-xl border border-line bg-surface shadow-card;
+  }
+  .focus-ring {
+    @apply focus:outline-none focus-visible:ring-2 focus-visible:ring-brand-500/50 focus-visible:ring-offset-2 focus-visible:ring-offset-canvas;
+  }
 }

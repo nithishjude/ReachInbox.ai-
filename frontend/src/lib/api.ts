@@ -1,6 +1,7 @@
 import type {
   EmailItem,
   EmailStats,
+  EmailStatus,
   ListKind,
   Paginated,
   ScheduleRequest,
@@ -38,9 +39,10 @@ export const api = {
   me: () => request<{ user: User }>("/auth/me").then((r) => r.user),
   logout: () => request<{ ok: true }>("/auth/logout", { method: "POST" }),
 
-  listEmails: (kind: ListKind, params: { search?: string; page?: number; pageSize?: number } = {}) => {
+  listEmails: (kind: ListKind, params: { search?: string; status?: EmailStatus; page?: number; pageSize?: number } = {}) => {
     const qs = new URLSearchParams();
     if (params.search) qs.set("search", params.search);
+    if (params.status) qs.set("status", params.status);
     if (params.page) qs.set("page", String(params.page));
     if (params.pageSize) qs.set("pageSize", String(params.pageSize));
     return request<Paginated<EmailItem>>(`/emails/${kind}?${qs}`);
@@ -50,4 +52,7 @@ export const api = {
   schedule: (body: ScheduleRequest) =>
     request<ScheduleResponse>("/emails/schedule", { method: "POST", body: JSON.stringify(body) }),
   senders: () => request<SendersResponse>("/senders"),
+  deleteEmail: (id: string) => request<{ ok: true }>(`/emails/${id}`, { method: "DELETE" }),
+  retry: (target: { ids: string[] } | { all: true }) =>
+    request<{ retried: number }>("/emails/retry", { method: "POST", body: JSON.stringify(target) }),
 };

@@ -1,5 +1,6 @@
+import { AlertCircle } from "lucide-react";
+import { useState, type FormEvent } from "react";
 import { useSearchParams } from "react-router-dom";
-import { Logo } from "../components/Logo";
 import { GOOGLE_LOGIN_URL } from "../lib/api";
 
 const errorMessages: Record<string, string> = {
@@ -18,32 +19,55 @@ function GoogleIcon() {
   );
 }
 
+const field = "h-[70px] w-full rounded-xl bg-subtle px-6 text-[17px] outline-none placeholder:text-fg-muted focus:ring-2 focus:ring-brand-600/30";
+
 export function LoginPage() {
   const [params] = useSearchParams();
-  const error = params.get("error");
+  const oauthError = params.get("error");
+  const [notice, setNotice] = useState<string | null>(null);
+
+  // The Figma shows an email/password form; this build authenticates with Google only.
+  const onSubmit = (e: FormEvent) => {
+    e.preventDefault();
+    setNotice("Email & password sign-in isn't enabled. Please use “Login with Google”.");
+  };
+
+  const message = notice ?? (oauthError ? (errorMessages[oauthError] ?? "Sign-in failed. Please try again.") : null);
 
   return (
-    <div className="flex min-h-full flex-col items-center justify-center bg-gradient-to-b from-white to-brand-50 px-4">
-      <div className="mb-8">
-        <Logo />
-      </div>
-      <div className="w-full max-w-md rounded-2xl bg-white p-8 shadow-card">
-        <h1 className="text-center text-2xl font-semibold">Login</h1>
-        <p className="mt-2 text-center text-sm text-ink-500">Schedule and track cold email campaigns.</p>
-
-        {error && (
-          <p className="mt-6 rounded-lg bg-red-50 px-4 py-3 text-sm text-red-700">{errorMessages[error] ?? "Sign-in failed. Please try again."}</p>
-        )}
+    <div className="flex min-h-full items-center justify-center bg-canvas px-4 py-10">
+      <div className="w-full max-w-[620px] rounded-2xl border border-line bg-surface px-6 py-14 sm:px-[72px]">
+        <h1 className="text-center text-[44px] font-semibold leading-none">Login</h1>
 
         <a
           href={GOOGLE_LOGIN_URL}
-          className="mt-8 flex h-12 w-full items-center justify-center gap-3 rounded-full border border-ink-200 bg-white text-sm font-medium text-ink-900 shadow-sm transition-colors hover:bg-ink-50"
+          className="focus-ring mt-10 flex h-[60px] w-full items-center justify-center gap-3 rounded-xl bg-brand-50 text-[19px] text-fg transition-colors hover:bg-brand-100 dark:bg-brand-600/15 dark:hover:bg-brand-600/25"
         >
           <GoogleIcon />
           Login with Google
         </a>
 
-        <p className="mt-8 text-center text-xs text-ink-400">By continuing you agree to send only test emails through Ethereal.</p>
+        <div className="my-9 flex items-center gap-6 text-[15px] tracking-wide text-fg-subtle">
+          <span className="h-px flex-1 bg-line" />
+          or sign up through email
+          <span className="h-px flex-1 bg-line" />
+        </div>
+
+        <form onSubmit={onSubmit} className="space-y-4" noValidate>
+          <input type="email" placeholder="Email ID" aria-label="Email ID" autoComplete="email" className={field} />
+          <input type="password" placeholder="Password" aria-label="Password" autoComplete="current-password" className={field} />
+
+          {message && (
+            <p className="flex items-start gap-2 rounded-lg bg-amber-50 px-4 py-3 text-sm text-amber-800 dark:bg-amber-500/10 dark:text-amber-200">
+              <AlertCircle className="mt-0.5 h-4 w-4 shrink-0" />
+              {message}
+            </p>
+          )}
+
+          <button type="submit" className="focus-ring !mt-9 h-[60px] w-full rounded-xl bg-brand-600 text-[19px] text-white transition-colors hover:bg-brand-700">
+            Login
+          </button>
+        </form>
       </div>
     </div>
   );

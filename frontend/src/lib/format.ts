@@ -9,6 +9,14 @@ const dateTime = new Intl.DateTimeFormat(undefined, {
 
 export const formatDateTime = (iso: string | null | undefined) => (iso ? dateTime.format(new Date(iso)) : "—");
 
+// Figma pill: "Tue 9:15:12 AM"
+const pillTime = new Intl.DateTimeFormat(undefined, { weekday: "short", hour: "numeric", minute: "2-digit", second: "2-digit" });
+export const formatPillTime = (iso: string) => pillTime.format(new Date(iso)).replace(",", "");
+
+// Email header: "Nov 3, 10:23 AM"
+const shortDateTime = new Intl.DateTimeFormat(undefined, { month: "short", day: "numeric", hour: "numeric", minute: "2-digit" });
+export const formatShortDateTime = (iso: string) => shortDateTime.format(new Date(iso));
+
 /** Value for <input type="datetime-local"> in the user's local timezone. */
 export function toLocalInputValue(date: Date): string {
   const pad = (n: number) => String(n).padStart(2, "0");

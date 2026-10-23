@@ -1,9 +1,18 @@
 import { Router } from "express";
 import { z } from "zod";
 import { env } from "../config/env";
-import { countByKind, createCampaign, getEmailForUser, listEmails, ListKind } from "../db/emails.repo";
+import {
+  createCampaign,
+  deleteEmail,
+  EmailStatus,
+  getEmailForUser,
+  getStats,
+  listEmails,
+  ListKind,
+  resetFailedForRetry,
+} from "../db/emails.repo";
 import { listSenders } from "../mail/senders";
-import { enqueueEmails } from "../queue/queue";
+import { emailQueue, enqueueEmails, jobIdFor, requeueEmails } from "../queue/queue";
 import { getSenderUsage } from "../rateLimiter/hourlyLimiter";
 import { asyncHandler } from "./asyncHandler";
 
@@ -85,8 +94,11 @@ emailsRouter.post(
   }),
 );
 
+const STATUSES = ["scheduled", "rate_limited", "sending", "sent", "failed"] as const satisfies readonly EmailStatus[];
+
 const listQuery = z.object({
   search: z.string().trim().max(200).optional(),
+  status: z.enum(STATUSES).optional(),
   page: z.coerce.number().int().min(1).default(1),
   pageSize: z.coerce.number().int().min(1).max(200).default(50),
 });
@@ -97,6 +109,7 @@ const listHandler = (kind: ListKind) =>
     const { items, total } = await listEmails({
       userId: req.user!.id,
       kind,
+      status: q.status,
       search: q.search || undefined,
       limit: q.pageSize,
       offset: (q.page - 1) * q.pageSize,
@@ -110,7 +123,27 @@ emailsRouter.get("/sent", listHandler("sent"));
 emailsRouter.get(
   "/stats",
   asyncHandler(async (req, res) => {
-    res.json(await countByKind(req.user!.id));
+    res.json(await getStats(req.user!.id));
+  }),
+);
+
+/** POST /api/emails/retry  { ids: string[] } or { all: true } — re-queue failed emails now. */
+const retrySchema = z.union([
+  z.object({ ids: z.array(z.string().uuid()).min(1).max(1000) }),
+  z.object({ all: z.literal(true) }),
+]);
+
+emailsRouter.post(
+  "/retry",
+  asyncHandler(async (req, res) => {
+    const parsed = retrySchema.safeParse(req.body);
+    if (!parsed.success) {
+      res.status(400).json({ error: "Provide { ids: [...] } or { all: true }" });
+      return;
+    }
+    const rows = await resetFailedForRetry(req.user!.id, "all" in parsed.data ? "all" : parsed.data.ids);
+    await requeueEmails(rows.map((r) => ({ emailId: r.id, runAt: new Date(r.next_attempt_at) })));
+    res.json({ retried: rows.length });
   }),
 );
 
@@ -127,6 +160,29 @@ emailsRouter.get(
       return;
     }
     res.json(email);
+  }),
+);
+
+/** DELETE /api/emails/:id — cancel a scheduled email or remove one from history. */
+emailsRouter.delete(
+  "/:id",
+  asyncHandler(async (req, res) => {
+    if (!z.string().uuid().safeParse(req.params.id).success) {
+      res.status(404).json({ error: "Email not found" });
+      return;
+    }
+    const result = await deleteEmail(req.user!.id, req.params.id);
+    if (result === "not_found") {
+      res.status(404).json({ error: "Email not found" });
+      return;
+    }
+    if (result === "sending") {
+      res.status(409).json({ error: "This email is being sent right now and can't be deleted" });
+      return;
+    }
+    // Best effort: drop the queued job too (the worker would skip it anyway).
+    await (await emailQueue.getJob(jobIdFor(req.params.id)))?.remove().catch(() => undefined);
+    res.json({ ok: true });
   }),
 );
 

@@ -30,12 +30,17 @@ export interface Paginated<T> {
   pageSize: number;
 }
 
-export type EmailStats = Record<ListKind, number>;
+export interface EmailStats extends Record<ListKind, number> {
+  byStatus: Record<EmailStatus, number>;
+  sentLastHour: number;
+}
 
 export interface Sender {
   id: string;
   name: string;
   email: string;
+  /** Real SMTP provider (delivers to real inboxes) vs Ethereal test inbox. */
+  real: boolean;
   usage: { window: number; used: number; limit: number };
 }
 
