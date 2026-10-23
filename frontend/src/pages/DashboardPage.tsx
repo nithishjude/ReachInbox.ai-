@@ -35,7 +35,15 @@ export function DashboardPage() {
   const campaigns = usePolling(() => api.campaigns({ search: debouncedSearch }), `${debouncedSearch}:${refreshKey}`, tab === "campaigns");
   const refresh = () => setRefreshKey((k) => k + 1);
 
-  const loadStats = useCallback(() => api.stats().then(setStats).catch(() => undefined), []);
+  // Counts are secondary to the list (which shows its own error state); keep the last known counts on failure.
+  const loadStats = useCallback(
+    () =>
+      api
+        .stats()
+        .then(setStats)
+        .catch((err) => console.warn("Could not refresh counts:", err)),
+    [],
+  );
   // Stats follow the list's polling: refresh whenever list data changes.
   useEffect(() => void loadStats(), [loadStats, list.items, refreshKey]);
 
@@ -77,7 +85,11 @@ export function DashboardPage() {
       <main className="min-w-0 flex-1 px-4 py-6 lg:pl-2 lg:pr-6">
         {/* Search + filter + refresh */}
         <div className="flex items-center gap-3 lg:gap-5">
-          <button onClick={() => setMenuOpen(true)} className="rounded-lg p-2 text-fg-muted hover:bg-subtle lg:hidden" aria-label="Open menu">
+          <button
+            onClick={() => setMenuOpen(true)}
+            className="rounded-lg p-2 text-fg-muted hover:bg-subtle lg:hidden"
+            aria-label="Open menu"
+          >
             <Menu className="h-5 w-5" />
           </button>
           <label className="flex h-12 min-w-0 flex-1 items-center gap-2.5 rounded-full bg-subtle px-5 lg:max-w-[840px]">
@@ -101,7 +113,13 @@ export function DashboardPage() {
             <span>
               {failed} email{failed === 1 ? "" : "s"} failed to send.
             </span>
-            <Button variant="secondary" size="sm" loading={retryingAll} onClick={() => void retryAll()} icon={<RotateCw className="h-3.5 w-3.5" />}>
+            <Button
+              variant="secondary"
+              size="sm"
+              loading={retryingAll}
+              onClick={() => void retryAll()}
+              icon={<RotateCw className="h-3.5 w-3.5" />}
+            >
               Retry all failed
             </Button>
           </div>
@@ -119,18 +137,18 @@ export function DashboardPage() {
               onCompose={compose}
             />
           ) : (
-          <EmailList
-            kind={listKind}
-            items={list.items}
-            loading={list.loading}
-            error={list.error}
-            filtered={!!debouncedSearch || filter !== "all"}
-            isStarred={isStarred}
-            onToggleStar={toggle}
-            onOpen={(e) => navigate(`/email/${e.id}`)}
-            onRetryLoad={list.refresh}
-            onCompose={compose}
-          />
+            <EmailList
+              kind={listKind}
+              items={list.items}
+              loading={list.loading}
+              error={list.error}
+              filtered={!!debouncedSearch || filter !== "all"}
+              isStarred={isStarred}
+              onToggleStar={toggle}
+              onOpen={(e) => navigate(`/email/${e.id}`)}
+              onRetryLoad={list.refresh}
+              onCompose={compose}
+            />
           )}
 
           {tab !== "campaigns" && list.pageCount > 1 && (
@@ -138,10 +156,22 @@ export function DashboardPage() {
               <span className="tabular-nums">
                 {(list.page - 1) * PAGE_SIZE + 1}–{Math.min(list.page * PAGE_SIZE, list.total)} of {list.total.toLocaleString()}
               </span>
-              <Button variant="ghost" size="icon" disabled={list.page <= 1} onClick={() => list.setPage(list.page - 1)} aria-label="Previous page">
+              <Button
+                variant="ghost"
+                size="icon"
+                disabled={list.page <= 1}
+                onClick={() => list.setPage(list.page - 1)}
+                aria-label="Previous page"
+              >
                 <ChevronLeft className="h-4 w-4" />
               </Button>
-              <Button variant="ghost" size="icon" disabled={list.page >= list.pageCount} onClick={() => list.setPage(list.page + 1)} aria-label="Next page">
+              <Button
+                variant="ghost"
+                size="icon"
+                disabled={list.page >= list.pageCount}
+                onClick={() => list.setPage(list.page + 1)}
+                aria-label="Next page"
+              >
                 <ChevronRight className="h-4 w-4" />
               </Button>
             </div>

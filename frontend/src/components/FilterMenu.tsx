@@ -42,7 +42,10 @@ export function FilterMenu({ kind, value, onChange }: { kind: ListKind; value: S
         {active && <span className="absolute right-1.5 top-1.5 h-2 w-2 rounded-full bg-brand-600" />}
       </button>
       {open && (
-        <div role="menu" className="animate-scale-in absolute right-0 z-30 mt-2 w-56 origin-top-right rounded-xl border border-line bg-surface p-1 shadow-pop">
+        <div
+          role="menu"
+          className="animate-scale-in absolute right-0 z-30 mt-2 w-56 origin-top-right rounded-xl border border-line bg-surface p-1 shadow-pop"
+        >
           {options[kind].map((o) => (
             <button
               key={o.value}

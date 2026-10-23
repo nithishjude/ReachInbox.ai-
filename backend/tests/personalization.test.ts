@@ -35,12 +35,11 @@ describe("personalised campaigns", () => {
       startAt: new Date(),
       delayMs: 0,
       hourlyLimit: 10,
-      recipients: [
-        { email: "ava@acme.com", fields: { name: "Ava Thompson", company: "Acme" } },
-        { email: "ben@globex.io" },
-      ],
+      recipients: [{ email: "ava@acme.com", fields: { name: "Ava Thompson", company: "Acme" } }, { email: "ben@globex.io" }],
     });
-    const { rows } = await pool.query(`SELECT recipient, subject, body FROM emails WHERE id = ANY($1::uuid[]) ORDER BY seq`, [emails.map((e) => e.id)]);
+    const { rows } = await pool.query(`SELECT recipient, subject, body FROM emails WHERE id = ANY($1::uuid[]) ORDER BY seq`, [
+      emails.map((e) => e.id),
+    ]);
     expect(rows[0]).toMatchObject({ subject: "Quick question, Ava", body: "<p>Hi Ava, loved what Acme is doing.</p>" });
     expect(rows[1]).toMatchObject({ subject: "Quick question,", body: "<p>Hi there, loved what  is doing.</p>" });
   });

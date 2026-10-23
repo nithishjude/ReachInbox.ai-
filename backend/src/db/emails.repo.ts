@@ -62,7 +62,9 @@ export async function createCampaign(input: CreateCampaignInput): Promise<{ camp
   const leads = input.recipients.map((r) => ({ email: r.email, vars: leadVars(r.email, r.fields) }));
 
   return withTransaction(async (client) => {
-    const { rows: [campaign] } = await client.query<{ id: string }>(
+    const {
+      rows: [campaign],
+    } = await client.query<{ id: string }>(
       `INSERT INTO campaigns (user_id, sender_id, subject, body, start_at, delay_ms, hourly_limit, total)
        VALUES ($1, $2, $3, $4, $5, $6, $7, $8) RETURNING id`,
       [input.userId, input.senderId, input.subject, input.body, input.startAt, input.delayMs, input.hourlyLimit, leads.length],
@@ -134,10 +136,10 @@ export async function markFailed(id: string, error: string): Promise<void> {
 
 /** SMTP rejected the message before accepting it -> safe to let BullMQ retry. */
 export async function releaseForRetry(id: string, error: string): Promise<void> {
-  await pool.query(
-    `UPDATE emails SET status = 'scheduled', error = $2, updated_at = now() WHERE id = $1 AND status = 'sending'`,
-    [id, error.slice(0, 1000)],
-  );
+  await pool.query(`UPDATE emails SET status = 'scheduled', error = $2, updated_at = now() WHERE id = $1 AND status = 'sending'`, [
+    id,
+    error.slice(0, 1000),
+  ]);
 }
 
 /**

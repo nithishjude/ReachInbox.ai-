@@ -52,7 +52,10 @@ export function CampaignList({ items, loading, error, filtered, onOpen, onRetryL
         title="No campaigns yet"
         description="Every time you schedule emails a campaign appears here with live progress."
         action={
-          <button onClick={onCompose} className="focus-ring h-10 rounded-full border border-brand-600 px-6 font-medium text-brand-600 hover:bg-brand-50 dark:hover:bg-brand-600/10">
+          <button
+            onClick={onCompose}
+            className="focus-ring h-10 rounded-full border border-brand-600 px-6 font-medium text-brand-600 hover:bg-brand-50 dark:hover:bg-brand-600/10"
+          >
             Compose
           </button>
         }
@@ -79,7 +82,9 @@ export function CampaignList({ items, loading, error, filtered, onOpen, onRetryL
                     {c.total} recipient{c.total === 1 ? "" : "s"} · from {c.sender_email} · created {formatShortDateTime(c.created_at)}
                   </p>
                 </div>
-                <span className={`shrink-0 rounded-full border px-2.5 py-0.5 text-sm ${stateMeta[state].className}`}>{stateMeta[state].label}</span>
+                <span className={`shrink-0 rounded-full border px-2.5 py-0.5 text-sm ${stateMeta[state].className}`}>
+                  {stateMeta[state].label}
+                </span>
               </div>
 
               <div className="mt-4">

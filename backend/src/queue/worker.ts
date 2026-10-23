@@ -1,14 +1,7 @@
 import { DelayedError, Job, UnrecoverableError, Worker } from "bullmq";
 import os from "os";
 import { env } from "../config/env";
-import {
-  claimForSending,
-  getEmailForSend,
-  markFailed,
-  markSent,
-  markThrottled,
-  releaseForRetry,
-} from "../db/emails.repo";
+import { claimForSending, getEmailForSend, markFailed, markSent, markThrottled, releaseForRetry } from "../db/emails.repo";
 import { createRedis } from "../lib/redis";
 import { closeTransports, getTransport } from "../mail/senders";
 import { sendEmail } from "../mail/sendEmail";

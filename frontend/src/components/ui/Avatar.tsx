@@ -29,7 +29,10 @@ export function Avatar({ name, src, size = 32 }: { name: string; src?: string | 
     );
   }
   return (
-    <span style={style} className={`inline-flex shrink-0 select-none items-center justify-center rounded-full font-semibold ${colorFor(name)}`}>
+    <span
+      style={style}
+      className={`inline-flex shrink-0 select-none items-center justify-center rounded-full font-semibold ${colorFor(name)}`}
+    >
       {initials(name)}
     </span>
   );

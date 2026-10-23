@@ -8,7 +8,7 @@ process.env.ETHEREAL_CACHE ??= "false";
 const bool = z
   .string()
   .optional()
-  .transform((v) => v === undefined || v === "" ? undefined : ["1", "true", "yes"].includes(v.toLowerCase()));
+  .transform((v) => (v === undefined || v === "" ? undefined : ["1", "true", "yes"].includes(v.toLowerCase())));
 
 const schema = z.object({
   PORT: z.coerce.number().int().positive().default(4000),
@@ -37,7 +37,12 @@ const schema = z.object({
   ADMIN_EMAILS: z
     .string()
     .default("")
-    .transform((s) => s.split(",").map((e) => e.trim().toLowerCase()).filter(Boolean)),
+    .transform((s) =>
+      s
+        .split(",")
+        .map((e) => e.trim().toLowerCase())
+        .filter(Boolean),
+    ),
 });
 
 const parsed = schema.safeParse(process.env);

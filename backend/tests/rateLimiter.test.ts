@@ -25,7 +25,9 @@ describe("hourly rate limiter (Redis Lua)", () => {
   it("enforces the per-sender limit across different campaigns", async () => {
     const senderId = randomUUID();
     const results = await Promise.all(
-      Array.from({ length: 12 }, () => reserveSendSlot({ senderId, campaignId: randomUUID(), campaignHourlyLimit: 100, senderHourlyLimit: 4, minGapMs: 0 })),
+      Array.from({ length: 12 }, () =>
+        reserveSendSlot({ senderId, campaignId: randomUUID(), campaignHourlyLimit: 100, senderHourlyLimit: 4, minGapMs: 0 }),
+      ),
     );
     expect(results.filter((r) => r.kind === "reserved")).toHaveLength(4);
     expect(results.filter((r) => r.kind === "limited").every((r) => r.kind === "limited" && r.scope === "sender")).toBe(true);

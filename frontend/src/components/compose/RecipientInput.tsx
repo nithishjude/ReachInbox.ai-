@@ -48,7 +48,10 @@ export function RecipientInput({ emails, onChange, onUpload, fileInputRef, inval
       onClick={() => input.current?.focus()}
     >
       {visible.map((email) => (
-        <span key={email} className="inline-flex items-center gap-1 rounded-full border border-brand-600 bg-brand-50 py-0.5 pl-3 pr-1.5 text-[15px] text-fg dark:bg-brand-600/15">
+        <span
+          key={email}
+          className="inline-flex items-center gap-1 rounded-full border border-brand-600 bg-brand-50 py-0.5 pl-3 pr-1.5 text-[15px] text-fg dark:bg-brand-600/15"
+        >
           {email}
           <button
             type="button"

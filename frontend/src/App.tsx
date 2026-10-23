@@ -33,7 +33,14 @@ const guarded = (page: ReactNode) => <RequireAuth>{page}</RequireAuth>;
 export function App() {
   return (
     <Routes>
-      <Route path="/login" element={<GuestOnly><LoginPage /></GuestOnly>} />
+      <Route
+        path="/login"
+        element={
+          <GuestOnly>
+            <LoginPage />
+          </GuestOnly>
+        }
+      />
       <Route path="/" element={guarded(<DashboardPage />)} />
       <Route path="/compose" element={guarded(<ComposePage />)} />
       <Route path="/email/:id" element={guarded(<EmailPage />)} />

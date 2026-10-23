@@ -43,7 +43,10 @@ export function UserMenu() {
       </button>
 
       {open && (
-        <div role="menu" className="animate-scale-in absolute left-0 right-0 z-30 mt-2 origin-top rounded-xl border border-line bg-surface p-1 shadow-pop">
+        <div
+          role="menu"
+          className="animate-scale-in absolute left-0 right-0 z-30 mt-2 origin-top rounded-xl border border-line bg-surface p-1 shadow-pop"
+        >
           <button role="menuitem" onClick={toggle} className={`${item} text-fg hover:bg-subtle`}>
             {theme === "dark" ? <Sun className="h-4 w-4" /> : <Moon className="h-4 w-4" />}
             {theme === "dark" ? "Light mode" : "Dark mode"}

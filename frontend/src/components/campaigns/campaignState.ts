@@ -13,11 +13,26 @@ export function campaignState(c: CampaignProgress): CampaignState {
 }
 
 export const stateMeta: Record<CampaignState, { label: string; className: string }> = {
-  scheduled: { label: "Scheduled", className: "border-orange-200 bg-orange-50 text-orange-700 dark:border-orange-500/30 dark:bg-orange-500/10 dark:text-orange-300" },
-  sending: { label: "Sending", className: "border-sky-200 bg-sky-50 text-sky-700 dark:border-sky-500/30 dark:bg-sky-500/10 dark:text-sky-300" },
-  throttled: { label: "Throttled", className: "border-amber-300 bg-amber-50 text-amber-800 dark:border-amber-500/30 dark:bg-amber-500/10 dark:text-amber-300" },
-  completed: { label: "Completed", className: "border-brand-100 bg-brand-50 text-brand-700 dark:border-brand-600/30 dark:bg-brand-600/15 dark:text-brand-300" },
-  completed_with_errors: { label: "Completed with errors", className: "border-red-200 bg-red-50 text-red-700 dark:border-red-500/30 dark:bg-red-500/10 dark:text-red-300" },
+  scheduled: {
+    label: "Scheduled",
+    className: "border-orange-200 bg-orange-50 text-orange-700 dark:border-orange-500/30 dark:bg-orange-500/10 dark:text-orange-300",
+  },
+  sending: {
+    label: "Sending",
+    className: "border-sky-200 bg-sky-50 text-sky-700 dark:border-sky-500/30 dark:bg-sky-500/10 dark:text-sky-300",
+  },
+  throttled: {
+    label: "Throttled",
+    className: "border-amber-300 bg-amber-50 text-amber-800 dark:border-amber-500/30 dark:bg-amber-500/10 dark:text-amber-300",
+  },
+  completed: {
+    label: "Completed",
+    className: "border-brand-100 bg-brand-50 text-brand-700 dark:border-brand-600/30 dark:bg-brand-600/15 dark:text-brand-300",
+  },
+  completed_with_errors: {
+    label: "Completed with errors",
+    className: "border-red-200 bg-red-50 text-red-700 dark:border-red-500/30 dark:bg-red-500/10 dark:text-red-300",
+  },
 };
 
 /** One human sentence about what happens next. */

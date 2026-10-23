@@ -49,11 +49,17 @@ export function ToastProvider({ children }: { children: ReactNode }) {
   return (
     <ToastContext.Provider value={api}>
       {children}
-      <div className="pointer-events-none fixed bottom-4 right-4 z-50 flex w-[22rem] max-w-[calc(100vw-2rem)] flex-col gap-2" aria-live="polite">
+      <div
+        className="pointer-events-none fixed bottom-4 right-4 z-50 flex w-[22rem] max-w-[calc(100vw-2rem)] flex-col gap-2"
+        aria-live="polite"
+      >
         {toasts.map((t) => {
           const { icon: Icon, className } = kinds[t.kind];
           return (
-            <div key={t.id} className="animate-slide-up pointer-events-auto flex gap-3 rounded-xl border border-line bg-surface p-3.5 shadow-pop">
+            <div
+              key={t.id}
+              className="animate-slide-up pointer-events-auto flex gap-3 rounded-xl border border-line bg-surface p-3.5 shadow-pop"
+            >
               <Icon className={`mt-0.5 h-4 w-4 shrink-0 ${className}`} />
               <div className="min-w-0 flex-1">
                 <p className="text-sm font-medium">{t.title}</p>

@@ -32,7 +32,11 @@ const scheduleSchema = z.object({
     .min(1, "Add at least one recipient")
     .max(MAX_RECIPIENTS),
   startAt: z.coerce.date().optional(),
-  delayBetweenEmailsSec: z.coerce.number().min(0).max(24 * 3600).default(0),
+  delayBetweenEmailsSec: z.coerce
+    .number()
+    .min(0)
+    .max(24 * 3600)
+    .default(0),
   hourlyLimit: z.coerce.number().int().min(1).max(100_000).optional(),
 });
 
@@ -74,6 +78,11 @@ emailsRouter.post(
       return;
     }
 
+    // A start time in the past is a client error (a minute of clock skew is tolerated and means "now").
+    if (input.startAt && input.startAt.getTime() < Date.now() - 60_000) {
+      res.status(400).json({ error: "startAt cannot be in the past" });
+      return;
+    }
     const startAt = input.startAt && input.startAt.getTime() > Date.now() ? input.startAt : new Date();
     const { campaignId, emails } = await createCampaign({
       userId: req.user!.id,
@@ -134,10 +143,7 @@ emailsRouter.get(
 );
 
 /** POST /api/emails/retry  { ids: string[] } or { all: true } — re-queue failed emails now. */
-const retrySchema = z.union([
-  z.object({ ids: z.array(z.string().uuid()).min(1).max(1000) }),
-  z.object({ all: z.literal(true) }),
-]);
+const retrySchema = z.union([z.object({ ids: z.array(z.string().uuid()).min(1).max(1000) }), z.object({ all: z.literal(true) })]);
 
 emailsRouter.post(
   "/retry",
@@ -187,7 +193,9 @@ emailsRouter.delete(
       return;
     }
     // Best effort: drop the queued job too (the worker would skip it anyway).
-    await (await emailQueue.getJob(jobIdFor(req.params.id)))?.remove().catch(() => undefined);
+    // Also drop the queued job. If that fails (e.g. it is locked), the worker finds no row and skips it.
+    const job = await emailQueue.getJob(jobIdFor(req.params.id));
+    await job?.remove().catch((err: Error) => console.warn(`[api] could not remove job ${job.id}; worker will skip it:`, err.message));
     res.json({ ok: true });
   }),
 );

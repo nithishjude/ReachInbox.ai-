@@ -20,7 +20,10 @@ interface EmailListProps {
 }
 
 const empty: Record<ListKind, { title: string; description: string }> = {
-  scheduled: { title: "No scheduled emails", description: "Compose an email and upload your leads. They'll wait here until it's their turn to send." },
+  scheduled: {
+    title: "No scheduled emails",
+    description: "Compose an email and upload your leads. They'll wait here until it's their turn to send.",
+  },
   sent: { title: "No sent emails yet", description: "Once scheduled emails go out, they'll appear here with their delivery status." },
 };
 
@@ -40,7 +43,18 @@ function SkeletonRows() {
   );
 }
 
-export function EmailList({ kind, items, loading, error, filtered, isStarred, onToggleStar, onOpen, onRetryLoad, onCompose }: EmailListProps) {
+export function EmailList({
+  kind,
+  items,
+  loading,
+  error,
+  filtered,
+  isStarred,
+  onToggleStar,
+  onOpen,
+  onRetryLoad,
+  onCompose,
+}: EmailListProps) {
   if (loading) return <SkeletonRows />;
 
   if (error && items.length === 0) {
@@ -66,7 +80,10 @@ export function EmailList({ kind, items, loading, error, filtered, isStarred, on
         {...empty[kind]}
         action={
           kind === "scheduled" ? (
-            <button onClick={onCompose} className="focus-ring h-10 rounded-full border border-brand-600 px-6 font-medium text-brand-600 hover:bg-brand-50 dark:hover:bg-brand-600/10">
+            <button
+              onClick={onCompose}
+              className="focus-ring h-10 rounded-full border border-brand-600 px-6 font-medium text-brand-600 hover:bg-brand-50 dark:hover:bg-brand-600/10"
+            >
               Compose
             </button>
           ) : undefined

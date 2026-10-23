@@ -2,8 +2,7 @@ import nodemailer, { Transporter } from "nodemailer";
 import type { EmailRow } from "../db/emails.repo";
 import type { SenderRow } from "./senders";
 
-const escapeHtml = (s: string) =>
-  s.replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;").replace(/"/g, "&quot;");
+const escapeHtml = (s: string) => s.replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;").replace(/"/g, "&quot;");
 
 /** Bodies written in the rich-text editor are HTML; older/API bodies may be plain text. */
 export const isHtml = (s: string) => /<\/?[a-z][\s\S]*>/i.test(s);

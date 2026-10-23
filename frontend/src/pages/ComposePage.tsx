@@ -26,8 +26,10 @@ interface UploadInfo {
 }
 
 const label = "w-14 shrink-0 text-[17px] text-fg";
-const underlineInput = "min-w-0 flex-1 border-b bg-transparent py-3 text-[17px] outline-none placeholder:text-fg-subtle focus:border-brand-600";
-const boxInput = "h-12 w-[88px] rounded-lg border bg-transparent px-3 text-[17px] outline-none placeholder:text-fg-subtle focus:border-brand-600";
+const underlineInput =
+  "min-w-0 flex-1 border-b bg-transparent py-3 text-[17px] outline-none placeholder:text-fg-subtle focus:border-brand-600";
+const boxInput =
+  "h-12 w-[88px] rounded-lg border bg-transparent px-3 text-[17px] outline-none placeholder:text-fg-subtle focus:border-brand-600";
 
 export function ComposePage() {
   const navigate = useNavigate();
@@ -123,7 +125,10 @@ export function ComposePage() {
         delayBetweenEmailsSec: delaySec ? Number(delaySec) : 0,
         hourlyLimit: hourlyLimit ? Number(hourlyLimit) : (meta?.limits.maxEmailsPerHourPerSender ?? 200),
       });
-      toast.success(`${res.scheduled} email${res.scheduled === 1 ? "" : "s"} scheduled`, sendAt ? `Starts ${formatPillTime(res.firstSendAt)}` : "Sending now");
+      toast.success(
+        `${res.scheduled} email${res.scheduled === 1 ? "" : "s"} scheduled`,
+        sendAt ? `Starts ${formatPillTime(res.firstSendAt)}` : "Sending now",
+      );
       navigate("/");
     } catch (err) {
       toast.error("Couldn't schedule", err instanceof Error ? err.message : undefined);
@@ -142,7 +147,11 @@ export function ComposePage() {
             {sendAt && (
               <span className="hidden items-center gap-1.5 rounded-full bg-brand-50 py-1 pl-3 pr-1.5 text-sm text-brand-700 sm:inline-flex dark:bg-brand-600/15 dark:text-brand-300">
                 {formatPillTime(sendAt.toISOString())}
-                <button onClick={() => setSendAt(null)} aria-label="Clear send time" className="rounded-full p-0.5 hover:bg-brand-100 dark:hover:bg-brand-600/30">
+                <button
+                  onClick={() => setSendAt(null)}
+                  aria-label="Clear send time"
+                  className="rounded-full p-0.5 hover:bg-brand-100 dark:hover:bg-brand-600/30"
+                >
                   <X className="h-3.5 w-3.5" />
                 </button>
               </span>
@@ -211,11 +220,18 @@ export function ComposePage() {
                 </option>
               ))}
             </select>
-            <svg className="pointer-events-none absolute right-3.5 top-1/2 h-4 w-4 -translate-y-1/2 text-fg-subtle" viewBox="0 0 20 20" fill="currentColor" aria-hidden>
+            <svg
+              className="pointer-events-none absolute right-3.5 top-1/2 h-4 w-4 -translate-y-1/2 text-fg-subtle"
+              viewBox="0 0 20 20"
+              fill="currentColor"
+              aria-hidden
+            >
               <path d="M5.2 7.2a1 1 0 0 1 1.4 0L10 10.6l3.4-3.4a1 1 0 1 1 1.4 1.4l-4.1 4.1a1 1 0 0 1-1.4 0L5.2 8.6a1 1 0 0 1 0-1.4z" />
             </svg>
           </div>
-          {selectedSender?.real && <span className="hidden text-sm text-amber-700 md:inline dark:text-amber-300">Delivers to real inboxes</span>}
+          {selectedSender?.real && (
+            <span className="hidden text-sm text-amber-700 md:inline dark:text-amber-300">Delivers to real inboxes</span>
+          )}
         </div>
 
         {/* To */}
@@ -237,7 +253,9 @@ export function ComposePage() {
             {errors.recipients ??
               (recipients.length > 0 && (
                 <>
-                  <span className="font-medium text-brand-700 dark:text-brand-300">{recipients.length} email address{recipients.length === 1 ? "" : "es"}</span>
+                  <span className="font-medium text-brand-700 dark:text-brand-300">
+                    {recipients.length} email address{recipients.length === 1 ? "" : "es"}
+                  </span>
                   {upload && ` · ${upload.name}: ${upload.found} detected`}
                   {upload && upload.duplicates > 0 && `, ${upload.duplicates} duplicate${upload.duplicates === 1 ? "" : "s"} removed`}
                   {upload && upload.invalid > 0 && `, ${upload.invalid} invalid skipped`}
@@ -306,7 +324,14 @@ export function ComposePage() {
         </div>
 
         <div className="pb-3">
-          <PersonalizePanel columns={columns} recipients={recipients} fields={leadFields} subject={subject} body={body} onInsert={insertVariable} />
+          <PersonalizePanel
+            columns={columns}
+            recipients={recipients}
+            fields={leadFields}
+            subject={subject}
+            body={body}
+            onInsert={insertVariable}
+          />
         </div>
 
         <RichTextEditor
@@ -321,7 +346,6 @@ export function ComposePage() {
           invalid={!!errors.body}
         />
         {errors.body && <p className="pt-1 text-sm text-red-600">{errors.body}</p>}
-
       </div>
     </div>
   );

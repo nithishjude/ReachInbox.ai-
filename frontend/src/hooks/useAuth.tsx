@@ -26,7 +26,8 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   }, []);
 
   const logout = useCallback(async () => {
-    await api.logout().catch(() => undefined);
+    // Even if the server call fails, the local session is cleared and the user lands on /login.
+    await api.logout().catch((err) => console.warn("Logout request failed:", err));
     setUser(null);
   }, []);
 

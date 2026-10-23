@@ -14,7 +14,9 @@
     "typecheck": "tsc --noEmit -p tsconfig.json",
     "load-test": "tsx scripts/loadTest.ts",
     "test": "vitest run",
-    "proof:workers": "tsx scripts/multiWorkerProof.ts"
+    "proof:workers": "tsx scripts/multiWorkerProof.ts",
+    "worker": "tsx watch src/workerMain.ts",
+    "api": "tsx watch src/server.ts"
   },
   "dependencies": {
     "@bull-board/api": "^6.5.3",

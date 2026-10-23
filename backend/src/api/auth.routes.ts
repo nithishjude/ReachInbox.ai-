@@ -43,7 +43,9 @@ authRouter.get("/google/callback", async (req, res) => {
     const p = ticket.getPayload();
     if (!p?.sub || !p.email) return fail("invalid_profile");
 
-    const { rows: [user] } = await pool.query<{ id: string; email: string; name: string; avatar_url: string | null }>(
+    const {
+      rows: [user],
+    } = await pool.query<{ id: string; email: string; name: string; avatar_url: string | null }>(
       `INSERT INTO users (google_sub, email, name, avatar_url) VALUES ($1, $2, $3, $4)
        ON CONFLICT (google_sub) DO UPDATE
          SET email = EXCLUDED.email, name = EXCLUDED.name, avatar_url = EXCLUDED.avatar_url, updated_at = now()

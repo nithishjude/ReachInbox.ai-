@@ -18,7 +18,10 @@ export function parseLeads(text: string): ParsedLeads {
 
   const tokens = text.split(/[\s,;|\t]+/);
   for (const raw of tokens) {
-    const token = raw.replace(/^["'<(]+|[">)'.]+$/g, "").trim().toLowerCase();
+    const token = raw
+      .replace(/^["'<(]+|[">)'.]+$/g, "")
+      .trim()
+      .toLowerCase();
     if (!token.includes("@")) continue;
     if (!EMAIL_RE.test(token)) {
       invalid.push(raw.trim());

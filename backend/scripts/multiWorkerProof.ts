@@ -33,10 +33,14 @@ async function main() {
   const [count, limit, workerCount] = [countArg, limitArg, workersArg].map(Number);
 
   await migrate();
-  const { rows: [user] } = await pool.query<{ id: string }>("SELECT id FROM users WHERE email = $1", [userEmail]);
+  const {
+    rows: [user],
+  } = await pool.query<{ id: string }>("SELECT id FROM users WHERE email = $1", [userEmail]);
   if (!user) throw new Error(`No user ${userEmail}; log in through the dashboard first`);
 
-  const { rows: [sender] } = await pool.query<{ id: string }>(
+  const {
+    rows: [sender],
+  } = await pool.query<{ id: string }>(
     `INSERT INTO senders (name, email, smtp_host, smtp_port, smtp_user, smtp_pass)
      VALUES ('Proof Sender', 'proof@dry-run.local', $1, 0, 'proof', 'proof')
      ON CONFLICT (email) DO UPDATE SET smtp_host = EXCLUDED.smtp_host RETURNING id`,
@@ -79,10 +83,9 @@ async function main() {
   const deadline = Date.now() + 120_000;
   let stats: { status: string; n: number }[] = [];
   while (Date.now() < deadline) {
-    ({ rows: stats } = await pool.query(
-      "SELECT status, count(*)::int AS n FROM emails WHERE campaign_id = $1 GROUP BY status",
-      [campaignId],
-    ));
+    ({ rows: stats } = await pool.query("SELECT status, count(*)::int AS n FROM emails WHERE campaign_id = $1 GROUP BY status", [
+      campaignId,
+    ]));
     const settled = stats.filter((s) => s.status === "sent" || s.status === "rate_limited").reduce((a, s) => a + s.n, 0);
     if (settled === count) break;
     await sleep(1000);
@@ -92,11 +95,15 @@ async function main() {
     "SELECT processed_by, count(*)::int AS n FROM emails WHERE campaign_id = $1 AND status = 'sent' GROUP BY 1 ORDER BY 1",
     [campaignId],
   );
-  const { rows: [dups] } = await pool.query<{ n: number }>(
+  const {
+    rows: [dups],
+  } = await pool.query<{ n: number }>(
     "SELECT count(*)::int AS n FROM (SELECT message_id FROM emails WHERE campaign_id = $1 AND message_id IS NOT NULL GROUP BY 1 HAVING count(*) > 1) d",
     [campaignId],
   );
-  const { rows: [limited] } = await pool.query<{ earliest: Date | null }>(
+  const {
+    rows: [limited],
+  } = await pool.query<{ earliest: Date | null }>(
     "SELECT min(next_attempt_at) AS earliest FROM emails WHERE campaign_id = $1 AND status = 'rate_limited'",
     [campaignId],
   );
@@ -109,7 +116,14 @@ async function main() {
   console.log(`Sent:          ${sent}  (limit ${limit})`);
   for (const w of byWorker) console.log(`  by ${w.processed_by}: ${w.n}`);
   console.log(`Rate limited:  ${rateLimited}  (rescheduled to ${limited.earliest?.toISOString() ?? "-"})`);
-  console.log(`Other states:  ${stats.filter((s) => !["sent", "rate_limited"].includes(s.status)).map((s) => `${s.status}=${s.n}`).join(", ") || "none"}`);
+  console.log(
+    `Other states:  ${
+      stats
+        .filter((s) => !["sent", "rate_limited"].includes(s.status))
+        .map((s) => `${s.status}=${s.n}`)
+        .join(", ") || "none"
+    }`,
+  );
   console.log(`Duplicates:    ${dups.n}`);
 
   const checks: [string, boolean][] = [

@@ -16,7 +16,24 @@ interface Options {
 }
 
 /** Shared entry for the three run modes: API only, worker only, or both in one process. */
+/** Fail fast with a clear message instead of hanging when Redis or Postgres is unreachable. */
+async function checkDependencies(): Promise<void> {
+  const timeout = (what: string) =>
+    new Promise<never>((_, reject) => setTimeout(() => reject(new Error(`${what} did not respond within 5s`)), 5000).unref());
+  try {
+    await Promise.race([redis.ping(), timeout("Redis")]);
+  } catch (err) {
+    throw new Error(`Cannot reach Redis at REDIS_URL=${env.REDIS_URL}: ${(err as Error).message}. Is "docker compose up -d" running?`);
+  }
+  try {
+    await Promise.race([pool.query("SELECT 1"), timeout("Postgres")]);
+  } catch (err) {
+    throw new Error(`Cannot reach Postgres at DATABASE_URL: ${(err as Error).message}. Is "docker compose up -d" running?`);
+  }
+}
+
 export async function bootstrap({ api, worker: runWorker }: Options): Promise<void> {
+  await checkDependencies();
   await migrate();
   await ensureSenders();
 
@@ -52,7 +69,7 @@ export async function bootstrap({ api, worker: runWorker }: Options): Promise<vo
 
 export function run(options: Options): void {
   bootstrap(options).catch((err) => {
-    console.error("[boot] failed to start", err);
+    console.error("[boot] failed to start:", err instanceof Error ? err.message : err);
     process.exit(1);
   });
 }

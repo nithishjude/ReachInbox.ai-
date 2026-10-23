@@ -67,7 +67,10 @@ interface RichTextEditorProps {
   onFocus?: () => void;
 }
 
-export const RichTextEditor = forwardRef<RichTextEditorHandle, RichTextEditorProps>(function RichTextEditor({ value, onChange, placeholder, invalid, onFocus }, handle) {
+export const RichTextEditor = forwardRef<RichTextEditorHandle, RichTextEditorProps>(function RichTextEditor(
+  { value, onChange, placeholder, invalid, onFocus },
+  handle,
+) {
   const ref = useRef<HTMLDivElement>(null);
   const savedRange = useRef<Range | null>(null);
   const [sizeOpen, setSizeOpen] = useState(false);

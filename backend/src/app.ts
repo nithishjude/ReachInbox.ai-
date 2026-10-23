@@ -21,7 +21,7 @@ export function createApp() {
   app.use(cookieParser());
   app.use(optionalAuth);
 
-  app.get("/health", async (_req, res) => {
+  app.get("/api/health", async (_req, res) => {
     const [db, rd] = await Promise.allSettled([pool.query("SELECT 1"), redis.ping()]);
     const ok = db.status === "fulfilled" && rd.status === "fulfilled";
     res.status(ok ? 200 : 503).json({ ok, db: db.status, redis: rd.status });

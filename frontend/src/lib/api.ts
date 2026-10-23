@@ -13,7 +13,10 @@ import type {
 } from "../types/email";
 
 export class ApiError extends Error {
-  constructor(public status: number, message: string) {
+  constructor(
+    public status: number,
+    message: string,
+  ) {
     super(message);
   }
 }
@@ -29,7 +32,12 @@ async function request<T>(path: string, init?: RequestInit): Promise<T> {
   } catch {
     throw new ApiError(0, "Cannot reach the server. Is the backend running?");
   }
-  const data = await res.json().catch(() => ({}));
+  // Non-JSON bodies (e.g. a proxy error page) still produce a readable error below.
+  const data: unknown = await res.json().catch(() => ({}));
+  // Session expired or cookie cleared: send the user back to login (auth endpoints handle 401 themselves).
+  if (res.status === 401 && !path.startsWith("/auth/")) {
+    window.location.assign("/login?error=session_expired");
+  }
   if (!res.ok) throw new ApiError(res.status, (data as { error?: string }).error ?? `Request failed (${res.status})`);
   return data as T;
 }
@@ -51,8 +59,7 @@ export const api = {
   },
   stats: () => request<EmailStats>("/emails/stats"),
   getEmail: (id: string) => request<EmailItem>(`/emails/${id}`),
-  schedule: (body: ScheduleRequest) =>
-    request<ScheduleResponse>("/emails/schedule", { method: "POST", body: JSON.stringify(body) }),
+  schedule: (body: ScheduleRequest) => request<ScheduleResponse>("/emails/schedule", { method: "POST", body: JSON.stringify(body) }),
   senders: () => request<SendersResponse>("/senders"),
   campaigns: (params: { search?: string; page?: number } = {}) => {
     const qs = new URLSearchParams();

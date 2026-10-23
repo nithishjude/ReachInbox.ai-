@@ -5,7 +5,10 @@ import { seedCampaign, statusOf } from "./fixtures";
 
 // Real SMTP is replaced by a spy; everything else (Postgres, Redis limiter) is real.
 const sendSpy = vi.fn(async (_t: unknown, _s: unknown, email: { id: string }) => ({ messageId: `<${email.id}@test>`, previewUrl: null }));
-vi.mock("../src/mail/sendEmail", async (orig) => ({ ...(await orig<object>()), sendEmail: (...a: [unknown, unknown, { id: string }]) => sendSpy(...a) }));
+vi.mock("../src/mail/sendEmail", async (orig) => ({
+  ...(await orig<object>()),
+  sendEmail: (...a: [unknown, unknown, { id: string }]) => sendSpy(...a),
+}));
 vi.mock("../src/mail/senders", async (orig) => ({
   ...(await orig<object>()),
   getTransport: async () => ({ transport: {}, sender: { email: "sender@test", name: "Sender" } }),

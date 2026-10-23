@@ -54,7 +54,12 @@ export function SendLaterPopover({ anchorRef, value, onDone, onClose }: Props) {
   };
 
   return (
-    <div ref={ref} role="dialog" aria-label="Send later" className="animate-scale-in absolute right-0 top-full z-30 mt-3 w-[400px] max-w-[calc(100vw-2rem)] origin-top-right rounded-xl border border-line bg-surface p-5 shadow-pop">
+    <div
+      ref={ref}
+      role="dialog"
+      aria-label="Send later"
+      className="animate-scale-in absolute right-0 top-full z-30 mt-3 w-[400px] max-w-[calc(100vw-2rem)] origin-top-right rounded-xl border border-line bg-surface p-5 shadow-pop"
+    >
       <h2 className="text-lg font-medium">Send Later</h2>
 
       <div className={`relative mt-5 border-b focus-within:border-brand-600 ${error ? "border-red-400" : "border-line"}`}>
@@ -101,7 +106,11 @@ export function SendLaterPopover({ anchorRef, value, onDone, onClose }: Props) {
         <button type="button" onClick={onClose} className="text-[16px] text-fg hover:text-fg-muted">
           Cancel
         </button>
-        <button type="button" onClick={done} className="h-10 rounded-full border border-brand-600 px-7 text-[16px] text-brand-600 hover:bg-brand-50 dark:hover:bg-brand-600/10">
+        <button
+          type="button"
+          onClick={done}
+          className="h-10 rounded-full border border-brand-600 px-7 text-[16px] text-brand-600 hover:bg-brand-50 dark:hover:bg-brand-600/10"
+        >
           Done
         </button>
       </div>

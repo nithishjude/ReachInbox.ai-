@@ -35,7 +35,9 @@ export function EmailPage() {
           setEmail(e);
           setError(null);
         })
-        .catch((err) => setError(err instanceof ApiError && err.status === 404 ? "This email doesn't exist anymore." : String(err.message))),
+        .catch((err) =>
+          setError(err instanceof ApiError && err.status === 404 ? "This email doesn't exist anymore." : String(err.message)),
+        ),
     [id],
   );
 
@@ -137,7 +139,11 @@ export function EmailPage() {
             {/* Delivery status */}
             <div className="mt-5 flex flex-wrap items-center gap-3 text-sm text-fg-muted">
               <StatusBadge email={email} />
-              {pending && <span>Scheduled for {formatDateTime(email.next_attempt_at)} ({relativeFromNow(email.next_attempt_at)})</span>}
+              {pending && (
+                <span>
+                  Scheduled for {formatDateTime(email.next_attempt_at)} ({relativeFromNow(email.next_attempt_at)})
+                </span>
+              )}
               {email.status === "rate_limited" && <span>· hourly limit reached, moved to the next hour window</span>}
               {email.status === "sent" && email.sent_at && <span>Sent {formatDateTime(email.sent_at)}</span>}
             </div>
@@ -158,7 +164,12 @@ export function EmailPage() {
             {(email.status === "failed" || email.preview_url) && (
               <div className="mt-10 flex flex-wrap gap-3">
                 {email.status === "failed" && (
-                  <Button variant="secondary" loading={busy === "retry"} onClick={() => void retry()} icon={<RotateCw className="h-4 w-4" />}>
+                  <Button
+                    variant="secondary"
+                    loading={busy === "retry"}
+                    onClick={() => void retry()}
+                    icon={<RotateCw className="h-4 w-4" />}
+                  >
                     Retry send
                   </Button>
                 )}

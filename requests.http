@@ -1,0 +1,72 @@
+### ReachInbox Scheduler — API requests
+# Use with the VS Code "REST Client" extension or JetBrains HTTP Client.
+# Auth: log in once at http://localhost:5173, then copy the `ri_session` cookie value
+# (DevTools → Application → Cookies) into @token below. It is sent as a Bearer token.
+
+@base = http://localhost:4000
+@token = paste-your-ri_session-cookie-here
+
+### Health (DB + Redis)
+GET {{base}}/api/health
+
+### Who am I
+GET {{base}}/api/auth/me
+Authorization: Bearer {{token}}
+
+### Senders + server limits
+GET {{base}}/api/senders
+Authorization: Bearer {{token}}
+
+### Schedule a personalised campaign (startAt must not be in the past)
+POST {{base}}/api/emails/schedule
+Authorization: Bearer {{token}}
+Content-Type: application/json
+
+{
+  "subject": "Quick idea for {{company|your team}}",
+  "body": "<p>Hi {{first_name|there}},</p><p>Loved what you're building.</p>",
+  "recipients": [
+    "plain@example.com",
+    { "email": "ava@acme.com", "fields": { "name": "Ava Thompson", "company": "Acme" } }
+  ],
+  "delayBetweenEmailsSec": 5,
+  "hourlyLimit": 3
+}
+
+### Validation error example (400)
+POST {{base}}/api/emails/schedule
+Authorization: Bearer {{token}}
+Content-Type: application/json
+
+{
+  "subject": "Past",
+  "body": "x",
+  "recipients": ["a@example.com"],
+  "startAt": "2020-01-01T00:00:00Z"
+}
+
+### Scheduled emails (scheduled / rate_limited / sending)
+GET {{base}}/api/emails/scheduled?page=1&pageSize=25
+Authorization: Bearer {{token}}
+
+### Sent emails (sent / failed), only failed
+GET {{base}}/api/emails/sent?status=failed
+Authorization: Bearer {{token}}
+
+### Counts per status
+GET {{base}}/api/emails/stats
+Authorization: Bearer {{token}}
+
+### Campaigns with live progress
+GET {{base}}/api/campaigns
+Authorization: Bearer {{token}}
+
+### Retry all failed emails
+POST {{base}}/api/emails/retry
+Authorization: Bearer {{token}}
+Content-Type: application/json
+
+{ "all": true }
+
+### Without a session -> 401
+GET {{base}}/api/emails/scheduled

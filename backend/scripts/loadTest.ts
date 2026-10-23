@@ -16,13 +16,18 @@ async function main() {
   const [userEmail, countArg = "1000", limitArg = "50"] = process.argv.slice(2);
   if (!userEmail) throw new Error("usage: npm run load-test -- <user-email> [count] [hourlyLimit]");
 
-  const { rows: [user] } = await pool.query<{ id: string }>("SELECT id FROM users WHERE email = $1", [userEmail]);
+  const {
+    rows: [user],
+  } = await pool.query<{ id: string }>("SELECT id FROM users WHERE email = $1", [userEmail]);
   if (!user) throw new Error(`No user ${userEmail}; log in through the dashboard first`);
   const [sender] = await listSenders();
   if (!sender) throw new Error("No senders; start the API once first");
 
   const count = Number(countArg);
-  const recipients = Array.from({ length: count }, (_, i) => ({ email: `lead${i + 1}@example.com`, fields: { first_name: `Lead ${i + 1}` } }));
+  const recipients = Array.from({ length: count }, (_, i) => ({
+    email: `lead${i + 1}@example.com`,
+    fields: { first_name: `Lead ${i + 1}` },
+  }));
   const t0 = Date.now();
   const { campaignId, emails } = await createCampaign({
     userId: user.id,

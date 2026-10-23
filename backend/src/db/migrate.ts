@@ -12,7 +12,10 @@ export async function migrate(): Promise<void> {
     await client.query("SELECT pg_advisory_lock($1)", [MIGRATION_LOCK_ID]);
     await client.query(sql);
   } finally {
-    await client.query("SELECT pg_advisory_unlock($1)", [MIGRATION_LOCK_ID]).catch(() => undefined);
+    // The lock is released with the session anyway; a failed unlock is only worth a warning.
+    await client
+      .query("SELECT pg_advisory_unlock($1)", [MIGRATION_LOCK_ID])
+      .catch((err: Error) => console.warn("[db] advisory unlock failed:", err.message));
     client.release();
   }
 }

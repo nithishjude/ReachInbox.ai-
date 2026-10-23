@@ -71,7 +71,14 @@ export function CampaignPage() {
           <p className="mt-3 text-sm text-fg-muted">{nextStepText(c)}</p>
 
           <div className="mt-6 grid grid-cols-2 gap-5 border-t border-line pt-5 sm:grid-cols-3 lg:grid-cols-6">
-            <Stat label="Sender" value={<span className="block truncate" title={c.sender_email}>{c.sender_email}</span>} />
+            <Stat
+              label="Sender"
+              value={
+                <span className="block truncate" title={c.sender_email}>
+                  {c.sender_email}
+                </span>
+              }
+            />
             <Stat label="Hourly limit" value={`${c.sent_this_hour} / ${c.hourly_limit} this hour`} />
             <Stat label="Delay" value={`${c.delay_ms / 1000}s between emails`} />
             <Stat label="Start" value={formatDateTime(c.start_at)} />

@@ -9,14 +9,30 @@ const segments: { status: EmailStatus; label: string; bar: string; dot: string }
   { status: "scheduled", label: "Scheduled", bar: "bg-line", dot: "bg-fg-subtle/50" },
 ];
 
-export function CampaignProgressBar({ campaign, legend = true, height = "h-2.5" }: { campaign: CampaignProgress; legend?: boolean; height?: string }) {
+export function CampaignProgressBar({
+  campaign,
+  legend = true,
+  height = "h-2.5",
+}: {
+  campaign: CampaignProgress;
+  legend?: boolean;
+  height?: string;
+}) {
   const total = Math.max(1, campaign.total);
   return (
     <div>
-      <div className={`flex w-full overflow-hidden rounded-full bg-subtle ${height}`} role="img" aria-label={`${campaign.counts.sent} of ${campaign.total} sent`}>
+      <div
+        className={`flex w-full overflow-hidden rounded-full bg-subtle ${height}`}
+        role="img"
+        aria-label={`${campaign.counts.sent} of ${campaign.total} sent`}
+      >
         {segments.map(({ status, bar }) =>
           campaign.counts[status] > 0 ? (
-            <div key={status} className={`${bar} transition-[width] duration-500`} style={{ width: `${(campaign.counts[status] / total) * 100}%` }} />
+            <div
+              key={status}
+              className={`${bar} transition-[width] duration-500`}
+              style={{ width: `${(campaign.counts[status] / total) * 100}%` }}
+            />
           ) : null,
         )}
       </div>
