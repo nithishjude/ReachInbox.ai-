@@ -48,7 +48,9 @@ const schema = z.object({
     ),
 });
 
-const parsed = schema.safeParse(process.env);
+// Hosting dashboards often save blank fields as "" — treat those as "not set" so defaults apply.
+const definedEnv = Object.fromEntries(Object.entries(process.env).filter(([, v]) => v !== undefined && v.trim() !== ""));
+const parsed = schema.safeParse(definedEnv);
 if (!parsed.success) {
   console.error("Invalid environment configuration:");
   for (const issue of parsed.error.issues) console.error(`  ${issue.path.join(".")}: ${issue.message}`);
