@@ -5,7 +5,9 @@ import { env } from "../config/env";
 const options: RedisOptions = { maxRetriesPerRequest: null, enableReadyCheck: true };
 
 export function createRedis(name: string): IORedis {
-  const conn = new IORedis(env.REDIS_URL, { ...options, connectionName: name });
+  // TLS is enabled automatically for "rediss://" URLs (e.g. Upstash). No CLIENT SETNAME is sent,
+  // because some hosted Redis services don't support it.
+  const conn = new IORedis(env.REDIS_URL, options);
   conn.on("error", (err) => console.error(`[redis:${name}]`, err.message));
   return conn;
 }
