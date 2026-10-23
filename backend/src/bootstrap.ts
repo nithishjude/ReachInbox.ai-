@@ -39,20 +39,32 @@ async function checkDependencies(): Promise<void> {
   }
 }
 
+/** Retries sender setup in the background (every 30 s, up to 10 times) instead of failing the boot. */
+async function ensureSendersWithRetry(attempt = 1): Promise<void> {
+  try {
+    await ensureSenders();
+  } catch (err) {
+    console.warn(`[senders] setup failed (attempt ${attempt}/10): ${(err as Error).message}`);
+    if (attempt < 10) setTimeout(() => void ensureSendersWithRetry(attempt + 1), 30_000).unref();
+  }
+}
+
 export async function bootstrap({ api, worker: runWorker }: Options): Promise<void> {
   await checkDependencies();
   await migrate();
-  await ensureSenders();
 
   let server: Server | undefined;
   let worker: Worker | undefined;
 
   if (api) {
-    await reconcileQueue();
+    // Listen first: hosting platforms (e.g. Render) treat a service that doesn't open its port quickly as failed.
     server = createApp().listen(env.PORT, () => {
       console.log(`[api] listening on http://localhost:${env.PORT}  (queue dashboard: /admin/queues)`);
     });
+    await reconcileQueue();
   }
+  // Creating Ethereal accounts needs an external API; a slow or failed call must not block or crash startup.
+  void ensureSendersWithRetry();
   if (runWorker) worker = startWorker();
 
   let shuttingDown = false;

@@ -25,7 +25,7 @@ interface SmtpServer {
   secure: boolean;
 }
 
-const ETHEREAL: SmtpServer = { host: "smtp.ethereal.email", port: 587, secure: false };
+const ETHEREAL: SmtpServer = { host: "smtp.ethereal.email", port: env.ETHEREAL_SMTP_PORT, secure: false };
 /** Senders with this host never touch the network (proof/benchmark scripts only). */
 export const DRY_RUN_HOST = "dry-run";
 const SENDER_NAMES = ["Oliver Brooks", "Maya Patel", "Liam Carter", "Sofia Reyes", "Noah Kim"];
@@ -62,6 +62,9 @@ async function upsertSender(name: string, user: string, pass: string, server: Sm
  * - SMTP_SENDERS (optional JSON): real providers such as Gmail, which deliver to real inboxes.
  */
 export async function ensureSenders(): Promise<void> {
+  // Keep stored Ethereal senders on the configured port (e.g. after switching to 2525).
+  await pool.query("UPDATE senders SET smtp_port = $1 WHERE smtp_host = $2 AND smtp_port <> $1", [ETHEREAL.port, ETHEREAL.host]);
+
   if (env.ETHEREAL_SENDERS) {
     for (const s of etherealSendersSchema.parse(JSON.parse(env.ETHEREAL_SENDERS))) await upsertSender(s.name, s.user, s.pass, ETHEREAL);
   } else {

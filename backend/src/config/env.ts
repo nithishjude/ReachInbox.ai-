@@ -24,6 +24,8 @@ const schema = z.object({
 
   ETHEREAL_SENDER_COUNT: z.coerce.number().int().min(1).max(10).default(3),
   ETHEREAL_SENDERS: z.string().optional(),
+  // Ethereal accepts SMTP on 587 and 2525. Use 2525 on hosts that block standard SMTP ports (e.g. Render free tier).
+  ETHEREAL_SMTP_PORT: z.coerce.number().int().positive().default(587),
   SMTP_SENDERS: z.string().optional(),
 
   WORKER_CONCURRENCY: z.coerce.number().int().min(1).max(100).default(5),
