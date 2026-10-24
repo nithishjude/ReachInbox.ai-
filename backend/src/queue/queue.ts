@@ -15,11 +15,14 @@ export interface EmailJobData {
  */
 export const jobIdFor = (emailId: string) => `email-${emailId}`;
 
+/** First retry after a transient SMTP error waits this long; each next retry doubles it. */
+export const RETRY_BACKOFF_MS = 30_000;
+
 export const emailQueue = new Queue<EmailJobData>(EMAIL_QUEUE, {
   connection: redis,
   defaultJobOptions: {
     attempts: env.SEND_MAX_ATTEMPTS,
-    backoff: { type: "exponential", delay: 30_000 },
+    backoff: { type: "exponential", delay: RETRY_BACKOFF_MS },
     // Keep a bounded history for the dashboard; the DB keeps the permanent record.
     removeOnComplete: { age: 24 * 3600, count: 5000 },
     removeOnFail: { age: 7 * 24 * 3600 },

@@ -6,7 +6,7 @@ import { createRedis } from "../lib/redis";
 import { closeTransports, getTransport } from "../mail/senders";
 import { sendEmail } from "../mail/sendEmail";
 import { reserveSendSlot } from "../rateLimiter/hourlyLimiter";
-import { EMAIL_QUEUE, EmailJobData } from "./queue";
+import { EMAIL_QUEUE, EmailJobData, RETRY_BACKOFF_MS } from "./queue";
 
 /** Job data once the rate limiter has handed out a send slot. */
 interface ReservedJobData extends EmailJobData {
@@ -86,7 +86,9 @@ export async function processEmailJob(job: Job<ReservedJobData>, token?: string)
       throw new UnrecoverableError(message);
     }
     // Transient error (network, 4xx): SMTP did not accept the message, so a retry can't duplicate it.
-    await releaseForRetry(emailId, message);
+    // BullMQ's exponential backoff: 30 s, 60 s, 120 s, ... (attemptsMade counts previous failures).
+    const retryAt = new Date(Date.now() + RETRY_BACKOFF_MS * 2 ** job.attemptsMade);
+    await releaseForRetry(emailId, message, retryAt);
     await job.updateData({ emailId }); // the retry must go through the rate limiter again
     throw err;
   }

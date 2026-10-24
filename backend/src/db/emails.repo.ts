@@ -134,12 +134,16 @@ export async function markFailed(id: string, error: string): Promise<void> {
   );
 }
 
-/** SMTP rejected the message before accepting it -> safe to let BullMQ retry. */
-export async function releaseForRetry(id: string, error: string): Promise<void> {
-  await pool.query(`UPDATE emails SET status = 'scheduled', error = $2, updated_at = now() WHERE id = $1 AND status = 'sending'`, [
-    id,
-    error.slice(0, 1000),
-  ]);
+/**
+ * SMTP rejected the message before accepting it -> safe to let BullMQ retry.
+ * `retryAt` is when BullMQ's backoff will run it again, so the UI can show it.
+ */
+export async function releaseForRetry(id: string, error: string, retryAt: Date): Promise<void> {
+  await pool.query(
+    `UPDATE emails SET status = 'scheduled', error = $2, next_attempt_at = $3, updated_at = now()
+     WHERE id = $1 AND status = 'sending'`,
+    [id, error.slice(0, 1000), retryAt],
+  );
 }
 
 /**
@@ -177,6 +181,7 @@ export interface EmailListItem {
   next_attempt_at: Date;
   sent_at: Date | null;
   error: string | null;
+  attempts: number;
   preview_url: string | null;
   sender_name: string;
   sender_email: string;
@@ -210,7 +215,7 @@ export async function listEmails(params: {
   const [items, count] = await Promise.all([
     pool.query<EmailListItem>(
       `SELECT e.id, e.recipient, e.subject, e.body, e.status, e.scheduled_at, e.next_attempt_at, e.sent_at,
-              e.error, e.preview_url, s.name AS sender_name, s.email AS sender_email
+              e.error, e.attempts, e.preview_url, s.name AS sender_name, s.email AS sender_email
        FROM emails e JOIN senders s ON s.id = e.sender_id
        WHERE ${where}
        ORDER BY ${order}
@@ -226,17 +231,20 @@ export interface EmailStats extends Record<ListKind, number> {
   byStatus: Record<EmailStatus, number>;
   sentLastHour: number;
   campaigns: number;
+  /** Pending emails more than a minute past their send time (worker stopped, SMTP down, ...). */
+  overdue: number;
 }
 
 export async function getStats(userId: string): Promise<EmailStats> {
-  const { rows } = await pool.query<Record<EmailStatus | "sent_last_hour" | "campaigns", string>>(
+  const { rows } = await pool.query<Record<EmailStatus | "sent_last_hour" | "campaigns" | "overdue", string>>(
     `SELECT count(*) FILTER (WHERE status = 'scheduled')    AS scheduled,
             count(*) FILTER (WHERE status = 'rate_limited') AS rate_limited,
             count(*) FILTER (WHERE status = 'sending')      AS sending,
             count(*) FILTER (WHERE status = 'sent')         AS sent,
             count(*) FILTER (WHERE status = 'failed')       AS failed,
             count(*) FILTER (WHERE status = 'sent' AND sent_at > now() - interval '1 hour') AS sent_last_hour,
-            (SELECT count(*) FROM campaigns WHERE user_id = $1) AS campaigns
+            (SELECT count(*) FROM campaigns WHERE user_id = $1) AS campaigns,
+            count(*) FILTER (WHERE status IN ('scheduled', 'sending') AND next_attempt_at < now() - interval '1 minute') AS overdue
      FROM emails WHERE user_id = $1`,
     [userId],
   );
@@ -254,6 +262,7 @@ export async function getStats(userId: string): Promise<EmailStats> {
     byStatus,
     sentLastHour: Number(r.sent_last_hour),
     campaigns: Number(r.campaigns),
+    overdue: Number(r.overdue),
   };
 }
 
@@ -275,7 +284,7 @@ export async function resetFailedForRetry(userId: string, ids: string[] | "all")
 export async function getEmailForUser(userId: string, id: string): Promise<EmailListItem | undefined> {
   const { rows } = await pool.query<EmailListItem>(
     `SELECT e.id, e.recipient, e.subject, e.body, e.status, e.scheduled_at, e.next_attempt_at, e.sent_at,
-            e.error, e.preview_url, s.name AS sender_name, s.email AS sender_email
+            e.error, e.attempts, e.preview_url, s.name AS sender_name, s.email AS sender_email
      FROM emails e JOIN senders s ON s.id = e.sender_id
      WHERE e.user_id = $1 AND e.id = $2`,
     [userId, id],

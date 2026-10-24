@@ -11,6 +11,7 @@ import { useAuth } from "../hooks/useAuth";
 import { useStarred } from "../hooks/useStarred";
 import { useToast } from "../hooks/useToast";
 import { api, ApiError } from "../lib/api";
+import { friendlyError, isOverdue } from "../lib/emailStatus";
 import { formatDateTime, formatShortDateTime, relativeFromNow } from "../lib/format";
 import { isHtml, sanitize } from "../lib/html";
 import type { EmailItem } from "../types/email";
@@ -139,18 +140,37 @@ export function EmailPage() {
             {/* Delivery status */}
             <div className="mt-5 flex flex-wrap items-center gap-3 text-sm text-fg-muted">
               <StatusBadge email={email} />
-              {pending && (
-                <span>
-                  Scheduled for {formatDateTime(email.next_attempt_at)} ({relativeFromNow(email.next_attempt_at)})
-                </span>
-              )}
+              {pending &&
+                (isOverdue(email) ? (
+                  <span>Was due {formatDateTime(email.next_attempt_at)}. Waiting for the worker to send it.</span>
+                ) : email.error && email.status === "scheduled" ? (
+                  <span>
+                    Retrying automatically at {formatDateTime(email.next_attempt_at)} ({relativeFromNow(email.next_attempt_at)})
+                  </span>
+                ) : (
+                  <span>
+                    Scheduled for {formatDateTime(email.next_attempt_at)} ({relativeFromNow(email.next_attempt_at)})
+                  </span>
+                ))}
               {email.status === "rate_limited" && <span>· hourly limit reached, moved to the next hour window</span>}
               {email.status === "sent" && email.sent_at && <span>Sent {formatDateTime(email.sent_at)}</span>}
             </div>
             {email.error && (
-              <div className="mt-3 flex gap-2.5 rounded-lg border border-red-200 bg-red-50 p-3 text-sm text-red-700 dark:border-red-500/30 dark:bg-red-500/10 dark:text-red-300">
+              <div
+                className={`mt-3 flex gap-2.5 rounded-lg border p-3 text-sm ${
+                  email.status === "failed"
+                    ? "border-red-200 bg-red-50 text-red-700 dark:border-red-500/30 dark:bg-red-500/10 dark:text-red-300"
+                    : "border-amber-300 bg-amber-50 text-amber-900 dark:border-amber-500/30 dark:bg-amber-500/10 dark:text-amber-200"
+                }`}
+              >
                 <AlertCircle className="mt-0.5 h-4 w-4 shrink-0" />
-                <span className="break-words">{email.error}</span>
+                <span className="break-words">
+                  <span className="font-medium">{friendlyError(email.error)}</span>
+                  {email.status === "failed"
+                    ? ` · gave up after ${email.attempts} attempt${email.attempts === 1 ? "" : "s"}. Use "Retry send" to try again.`
+                    : ` · attempt ${email.attempts}${email.max_attempts ? ` of ${email.max_attempts}` : ""}, retrying automatically.`}
+                  <span className="mt-1 block text-xs opacity-75">Details: {email.error}</span>
+                </span>
               </div>
             )}
 

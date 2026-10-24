@@ -1,4 +1,5 @@
 import { Clock3, Hourglass, Loader2, type LucideIcon } from "lucide-react";
+import { isOverdue } from "../../lib/emailStatus";
 import { formatPillTime } from "../../lib/format";
 import type { EmailItem, EmailStatus } from "../../types/email";
 
@@ -26,8 +27,10 @@ const styles: Record<EmailStatus, { className: string; icon?: LucideIcon; label?
 
 /** Status pill used in list rows and the email view. Pending emails show their (next) send time. */
 export function StatusBadge({ email }: { email: Pick<EmailItem, "status" | "next_attempt_at" | "error"> }) {
-  const { className, icon: Icon, label } = styles[email.status];
-  const text = label ?? formatPillTime(email.next_attempt_at);
+  const overdue = isOverdue(email);
+  const { className, icon: Icon, label } = overdue ? styles.rate_limited : styles[email.status];
+  // A past time reads like a bug; say what is actually happening instead.
+  const text = overdue ? (email.error ? "Retrying…" : "Waiting to send") : (label ?? formatPillTime(email.next_attempt_at));
   const title =
     email.status === "rate_limited"
       ? "Hourly limit reached; moved to the next hour window"

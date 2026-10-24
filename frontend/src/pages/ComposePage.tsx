@@ -215,7 +215,7 @@ export function ComposePage() {
               {!meta && <option>Loading…</option>}
               {meta?.senders.map((s) => (
                 <option key={s.id} value={s.id}>
-                  {s.email}
+                  {s.name} · {s.email}
                   {s.real ? " (real delivery)" : ""}
                 </option>
               ))}
@@ -302,6 +302,7 @@ export function ComposePage() {
               title="Seconds between two emails (default 0)"
               className={`${boxInput} ${errors.delay ? "border-red-400" : "border-line"}`}
             />
+            <span className="-ml-3 text-sm text-fg-subtle">sec</span>
           </label>
           <label className="flex items-center gap-2 text-[17px]">
             Hourly Limit
@@ -319,6 +320,7 @@ export function ComposePage() {
               title={`Maximum emails per hour (default ${meta?.limits.maxEmailsPerHourPerSender ?? 200})`}
               className={`${boxInput} ${errors.limit ? "border-red-400" : "border-line"}`}
             />
+            <span className="text-sm text-fg-subtle">/ hour</span>
           </label>
           {(errors.delay ?? errors.limit) && <span className="text-sm text-red-600">{errors.delay ?? errors.limit}</span>}
         </div>

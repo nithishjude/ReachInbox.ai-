@@ -171,7 +171,7 @@ emailsRouter.get(
       res.status(404).json({ error: "Email not found" });
       return;
     }
-    res.json(email);
+    res.json({ ...email, max_attempts: env.SEND_MAX_ATTEMPTS });
   }),
 );
 

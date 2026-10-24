@@ -1,4 +1,4 @@
-import { ChevronLeft, ChevronRight, Menu, RefreshCw, RotateCw, Search } from "lucide-react";
+import { AlertTriangle, ChevronLeft, ChevronRight, Menu, RefreshCw, RotateCw, Search } from "lucide-react";
 import { useCallback, useEffect, useState } from "react";
 import { useNavigate, useSearchParams } from "react-router-dom";
 import { CampaignList } from "../components/campaigns/CampaignList";
@@ -68,6 +68,7 @@ export function DashboardPage() {
   };
 
   const failed = stats?.byStatus.failed ?? 0;
+  const overdue = stats?.overdue ?? 0;
   const sidebar = <Sidebar active={tab} stats={stats} onSelect={selectTab} onCompose={compose} />;
 
   return (
@@ -107,6 +108,22 @@ export function DashboardPage() {
             <RefreshCw className={`h-5 w-5 ${list.refreshing ? "animate-spin" : ""}`} strokeWidth={1.5} />
           </button>
         </div>
+
+        {tab === "scheduled" && overdue > 0 && (
+          <div
+            role="status"
+            className="mt-5 flex items-start gap-3 rounded-xl border border-amber-300 bg-amber-50 px-5 py-3 text-sm text-amber-900 dark:border-amber-500/30 dark:bg-amber-500/10 dark:text-amber-200"
+          >
+            <AlertTriangle className="mt-0.5 h-4 w-4 shrink-0" />
+            <span>
+              <span className="font-medium">
+                {overdue} email{overdue === 1 ? " is" : "s are"} past {overdue === 1 ? "its" : "their"} send time.
+              </span>{" "}
+              They'll go out automatically. If this doesn't clear in a few minutes, check that the worker is running and the mail server is
+              reachable.
+            </span>
+          </div>
+        )}
 
         {tab === "sent" && failed > 0 && filter !== "sent" && (
           <div className="mt-5 flex flex-wrap items-center justify-between gap-3 rounded-xl border border-red-200 bg-red-50 px-5 py-3 text-sm text-red-800 dark:border-red-500/30 dark:bg-red-500/10 dark:text-red-200">

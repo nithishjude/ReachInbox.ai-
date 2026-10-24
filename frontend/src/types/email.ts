@@ -21,6 +21,9 @@ export interface EmailItem {
   next_attempt_at: string;
   sent_at: string | null;
   error: string | null;
+  attempts: number;
+  /** Only on GET /api/emails/:id */
+  max_attempts?: number;
   preview_url: string | null;
   sender_name: string;
   sender_email: string;
@@ -37,6 +40,8 @@ export interface EmailStats extends Record<ListKind, number> {
   byStatus: Record<EmailStatus, number>;
   sentLastHour: number;
   campaigns: number;
+  /** Pending emails more than a minute past their send time. */
+  overdue: number;
 }
 
 export interface CampaignProgress {
