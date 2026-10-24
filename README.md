@@ -430,9 +430,10 @@ cd frontend && npm test
 - personalization and HTML escaping
 - campaign progress counts
 
-**Frontend (10 tests):**
+**Frontend (14 tests):**
 - CSV parsing: quotes, semicolons, duplicates, invalid rows, header columns
 - the template helpers
+- when an email counts as overdue, and the friendly error messages
 
 GitHub Actions (`.github/workflows/ci.yml`) runs on every push: typechecks, both test suites, the builds, and the Docker image builds.
 
